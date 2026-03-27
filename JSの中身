@@ -1,0 +1,1441 @@
+$(function() {
+    // Wiki3の読み込み速度に合わせて実行タイミングを調整
+    // コメント欄などのプラグイン読み込みを待つため、少し長めに設定(500ms)
+    var initDelay = 500; 
+  
+    //↓4.db順制御のための定義
+    var wgySortAsc = true; // true=昇順 / false=降順
+  
+    // 【設定】ジャンプ位置とハイライト判定のオフセット
+    var offsetValue = 20; 
+
+  
+// ============================================================
+// ↓1. 目次生成・制御機能（PC版：最適化・軽量化・クールタイム実装版）
+// ============================================================
+function generateFloatingTOC() {
+    // 1229px以下（スマホ・タブレット等）は別関数で処理するため即時リターン
+    if (window.innerWidth <= 1230) return;
+
+    // 高さ700px以下の場合はSP版にフォールバック
+    if (window.innerHeight <= 700) {
+        setupFloatingTOC_SP();
+        return;
+    }
+
+    // --- 1. 目次コンテナの生成と取得 ---
+    let $toc = $('#floating-toc');
+    if ($toc.length === 0) {
+        // HTML構造を一括で生成（DOM操作回数の削減）
+        // HTML構造を一括で生成
+      $('body').append(`
+      <div id="floating-toc">
+      <div class="toc-title">
+      <div class="toc-title-left">
+      目次 <span id="toc-header-top" style="display:none;">▲TOP</span>
+      </div>
+      <span id="toc-toggle">[閉じる]</span>
+      </div>
+      <div id="toc-target"></div>
+      </div>
+      `);
+        $toc = $('#floating-toc');
+    }
+    
+    const $target = $toc.find('#toc-target');
+    const $toggle = $toc.find('#toc-toggle');
+    const $topBtn = $toc.find('#toc-header-top');
+    
+    $target.empty(); // 初期化（重複防止）
+
+    // --- 2. 目次アイテムの構築（文字列連結による高速化） ---
+    let tocHtml = '<div class="toc-item toc-page-name"><a href="#wiki_header" id="toc-link-home">ページトップ</a></div>';
+
+    // 見出しスキャン：最初のh1（ページタイトル）を除外
+    const $headings = $('#main_content, .main_content').find('h1, h2, h3').filter((i, el) => {
+        if ($(el).hasClass('toc-ignore')) return false;
+        return !(i === 0 && el.tagName.toLowerCase() === 'h1');
+    });
+
+    $headings.each(function(i) {
+        const $el = $(this);
+        const id = $el.attr('id') || `toc-anchor-${i}`;
+        $el.attr('id', id); // IDがなければ付与
+        
+        const tag = this.tagName.toLowerCase();
+        const prefix = (tag === "h2") ? "◆ " : (tag === "h3") ? "◇ " : "";
+        tocHtml += `<div class="toc-item toc-${tag}"><a href="#${id}">${prefix}${ $el.text().trim() }</a></div>`;
+    });
+
+    // コメント欄の追加
+    const $commentArea = $('#comment_area, .comment_plugin').first();
+    if ($commentArea.length) {
+        const cId = $commentArea.attr('id') || 'anchor-comment';
+        $commentArea.attr('id', cId);
+        tocHtml += `<div class="toc-item toc-h1"><a href="#${cId}">コメント欄</a></div>`;
+    }
+
+    $target.append(tocHtml); // 構築したHTMLを一挙に挿入
+
+    // --- 3. 状態復元と開閉制御 ---
+    const savedState = localStorage.getItem('wikiTocStatePC');
+    if (savedState === 'closed') {
+        $target.hide();
+        $toggle.text('[表示]');
+    }
+
+    // 開閉イベント（.off()で二重登録防止）
+    $toggle.off('click').on('click', function() {
+        $target.slideToggle(200, function() {
+            const isVisible = $target.is(':visible');
+            $toggle.text(isVisible ? '[閉じる]' : '[表示]');
+            localStorage.setItem('wikiTocStatePC', isVisible ? 'open' : 'closed');
+        });
+    });
+
+    // --- 4. スクロール・TOPボタン制御 ---
+    $target.off('scroll.topBtn').on('scroll.topBtn', function() {
+        // 30px以上スクロールでTOPボタン表示
+        $(this).scrollTop() > 30 ? $topBtn.fadeIn(200) : $topBtn.fadeOut(200);
+    });
+
+    $topBtn.off('click').on('click', () => {
+        $target.scrollTop(0);
+        $('#toc-link-home')[0].click(); // ページ最上部へ
+    });
+
+    // --- 5. 目次内の自動スクロール制御ロジック ---
+    let isUserScrolling = false;
+    let userScrollTimer = null;
+    let lastAutoScrollTime = 0; // 【新規】最終実行時刻を保持
+    const AUTO_SCROLL_COOLDOWN = 800; // 【新規】クールタイム（ミリ秒）
+
+    // ユーザー操作検知：自動スクロールを一時停止
+    $target.on('wheel DOMMouseScroll mousewheel touchmove click', () => {
+        isUserScrolling = true;
+        clearTimeout(userScrollTimer);
+        // 操作終了から2秒間は自動スクロールを再開させない
+        userScrollTimer = setTimeout(() => { isUserScrolling = false; }, 2000);
+    });
+
+    // 目次内の項目を中央付近へスクロールさせる関数
+    function scrollTocToActiveLink(element) {
+        const container = $target[0];
+        if (!element || !container || $(container).is(':hidden')) return;
+
+        // 【追加】クールタイム判定：前回の実行から間隔が短すぎる場合は無視
+        const now = Date.now();
+        if (now - lastAutoScrollTime < AUTO_SCROLL_COOLDOWN) return;
+
+        const relTop = element.offsetTop - container.offsetTop;
+        const relBottom = relTop + element.offsetHeight;
+        const scrollPos = container.scrollTop;
+        const containerHeight = container.offsetHeight;
+
+        // 判定用しきい値
+        const topMargin = 20;
+        const bottomMargin = 100;
+
+        // 現在の表示範囲外（マージン外）ならスムーズにスクロール
+        if (relTop < (scrollPos + topMargin) || relBottom > (scrollPos + containerHeight - bottomMargin)) {
+            container.scrollTo({
+                top: relTop - (containerHeight / 2) + (element.offsetHeight / 2),
+                behavior: 'smooth'
+            });
+            // 【追加】実行時刻を更新
+            lastAutoScrollTime = now;
+        }
+    }
+
+    // MutationObserverで「現在位置（active-sectionクラス）」の変化を監視
+    const observer = new MutationObserver(mutations => {
+        // ユーザーが手動スクロール中なら自動追従しない
+        if (isUserScrolling) return;
+
+        mutations.forEach(m => {
+            // 該当するリンクに active-section クラスが付与された瞬間に発火
+            if (m.type === 'attributes' && $(m.target).hasClass('active-section')) {
+                scrollTocToActiveLink(m.target);
+            }
+        });
+    });
+
+    // 目次内の全リンクに対してクラス監視を開始
+    $target.find('a').each(function() {
+        observer.observe(this, { attributes: true });
+    });
+
+    // 外部のスクロール連動イベントなどをセット
+    setupEvents($headings, $commentArea);
+
+    // --- 6. 初期ロード時の位置合わせ ---
+    $(window).on('load', () => {
+        setTimeout(() => {
+            // 目次が閉じている場合は計算コストをかけない
+            if ($target.is(':hidden')) return;
+
+            const currentScroll = $(window).scrollTop();
+            let $bestMatch = null;
+            let minDiff = Infinity;
+
+            // 1. ブラウザの現在表示位置に最も近い見出しを探す
+            $headings.each(function() {
+                const diff = Math.abs($(this).offset().top - currentScroll);
+                if (diff < minDiff) {
+                    minDiff = diff;
+                    $bestMatch = $(this);
+                }
+            });
+
+            // 2. その見出しに対応する目次項目をスクロール
+            if ($bestMatch) {
+                const $tocLink = $target.find(`a[href="#${$bestMatch.attr('id')}"]`);
+                if ($tocLink.length) {
+                    // 初期ロード時はクールタイムを無視して即座に合わせるため
+                    // 直接 scrollTo を呼ぶか、lastAutoScrollTime を 0 にしておく
+                    scrollTocToActiveLink($tocLink.parent()[0]);
+                }
+            }
+        }, 150); // 描画完了を待つための微小なディレイ
+    });
+}
+// ============================================================
+// ↑1. 目次生成・制御機能（PC版：最適化完了）
+// ============================================================
+
+
+
+
+// ============================================================
+// ↓2. スマホ専用UI（サイドメニュー風 ＆ 全スキャン ＆ 強力コメント検索）
+// ============================================================
+function setupFloatingTOC_SP() {
+    // 幅1230超かつ高さ700超の場合はPC版が担当するため除外
+    if (window.innerWidth >= 1230 && window.innerHeight > 700) return;
+    
+    if ($('#floating-toc').length === 0) {
+        $('body').append('<div id="floating-toc"><div class="toc-title">目次 <span id="toc-toggle">×</span></div><div id="toc-target"></div></div>');
+    }
+    if ($('#sp-toc-open-btn').length === 0) {
+        // 【修正】display:noneを明示してfadeIn()が正しく機能するようにする
+        $('body').append('<div id="sp-toc-open-btn" style="display:none;">≡</div>');
+        $('body').append('<div id="sp-toc-overlay"></div>');
+        // 追加直後にfadeInで表示
+        $('#sp-toc-open-btn').fadeIn(200);
+    }
+    
+    var $target = $('#toc-target');
+    $target.empty();
+
+    // スマホ版：ページトップ追加
+    $target.append('<div class="toc-item toc-page-name"><a href="#wiki_header">ページトップ</a></div>');
+
+    // 【修正】スキャンは全体対象にしつつ、非表示コンテンツ内の見出しを除外
+    var $headingsSP = $('#main_content, .main_content').find('h1, h2, h3').filter(function() {
+        if ($(this).hasClass('toc-ignore')) return false; // ← 追加
+        if ($(this).closest('.content-a, .content-b').length > 0) {
+            return $(this).closest('.content-a, .content-b').is(':visible');
+        }
+        return true;
+    });
+
+    $headingsSP.each(function(i) {
+        var $this = $(this);
+        var id = $this.attr('id') || 'toc-anchor-sp-' + i;
+        $this.attr('id', id);
+        var tagName = this.tagName.toLowerCase();
+        var prefix = (tagName === "h2") ? "◆ " : (tagName === "h3") ? "◇ " : "";
+        $target.append('<div class="toc-item toc-' + tagName + '"><a href="#' + id + '">' + prefix + $this.text().trim() + '</a></div>');
+    });
+
+    // スマホ版：コメント欄
+    var $commentSP = $('#comment_area, .comment_plugin, #comment-form, .uk-comment').first();
+    if ($commentSP.length > 0) {
+        var cId = $commentSP.attr('id') || 'anchor-comment-sp';
+        $commentSP.attr('id', cId);
+        $target.append('<div class="toc-item toc-h1"><a href="#' + cId + '">コメント欄</a></div>');
+    }
+
+    // スマホ専用開閉イベント
+    $('#sp-toc-open-btn').off('click').on('click', function() {
+        $('#floating-toc').addClass('is-open');
+        $('#sp-toc-overlay').fadeIn(200);
+        $(this).fadeOut(200);
+        $('#toc-toggle').text('×');
+        // 背景スクロールを禁止
+        /*$('body').css('overflow', 'hidden');*/
+    });
+    
+    $('#sp-toc-overlay, #toc-toggle').off('click').on('click', function() {
+        $('#floating-toc').removeClass('is-open');
+        $('#sp-toc-overlay').fadeOut(200);
+        $('#sp-toc-open-btn').fadeIn(200);
+        // 背景スクロール禁止を解除
+        $('body').css('overflow', '');
+    });
+
+    // スマホ版のクリック・スクロール処理をアタッチ
+    setupEvents($headingsSP, $commentSP);
+}
+
+// スムーズスクロールとハイライトの共通処理
+function setupEvents($headings, $commentArea) {
+    $(document).off('click', '#toc-target a').on('click', '#toc-target a', function(e) {
+        var href = $(this).attr('href');
+        var $targetEl = (href === "#wiki_header") ? $('body') : $(href);
+        if ($targetEl.length) {
+            e.preventDefault();
+            // スマホ時はクリック後に閉じる
+            if (window.innerWidth <= 1000) {
+                $('#floating-toc').removeClass('is-open');
+                $('#sp-toc-overlay').fadeOut(200);
+                $('#sp-toc-open-btn').fadeIn(200);
+                // 背景スクロール禁止を解除
+                $('body').css('overflow', '');
+            }
+            var targetPos = (href === "#wiki_header") ? 0 : $targetEl.offset().top - offsetValue + 1;
+            $('html, body').animate({ scrollTop: targetPos }, 400);
+        }
+    });
+
+    $(window).off('scroll.toc').on('scroll.toc', function() {
+        var scrollPos = $(document).scrollTop();
+        var $allLinks = $('#toc-target a');
+        
+        if (scrollPos < 100) {
+            $allLinks.removeClass('active-section');
+            $('#toc-link-home').addClass('active-section');
+            return;
+        }
+
+        var activeId = "";
+        $headings.each(function() {
+            if (scrollPos >= $(this).offset().top - offsetValue - 10) {
+                activeId = $(this).attr('id');
+            }
+        });
+
+        if ($commentArea && $commentArea.length > 0 && scrollPos >= $commentArea.offset().top - offsetValue - 10) {
+            activeId = $commentArea.attr('id');
+        }
+
+        if (activeId) {
+            $allLinks.removeClass('active-section');
+            $('#toc-target a[href="#' + activeId + '"]').addClass('active-section');
+        }
+    });
+}
+// ============================================================
+// ↑2. スマホ専用UI（サイドメニュー風 ＆ 全スキャン ＆ 強力コメント検索）
+// ============================================================
+
+// ============================================================
+//↓ 3. コンテンツ表示切り替え（通常版/強化版）
+// ============================================================
+function setupContentToggler() {
+    var $wrapper = $('.toggle-wrapper');
+    
+    if ($wrapper.length > 0 && $('#content-toggler').length === 0) {
+        var textA = $wrapper.data('text-enhanced') || "強化版";
+        var textB = $wrapper.data('text-normal') || "通常版";
+        var storageKey = 'contentToggle_' + window.location.pathname;
+        $('body').append('<div id="content-toggler">' + textA + '</div>');
+
+        function applyState(isEnhanced) {
+            var $a = $('.content-a'),
+                $b = $('.content-b'),
+                $btn = $('#content-toggler');
+
+            if (isEnhanced) {
+                $b.hide();
+                $a.stop(true, true).fadeIn(300);
+                $btn.text(textA).removeClass('is-active');
+            } else {
+                $a.hide();
+                $b.stop(true, true).fadeIn(300);
+                $btn.text(textB).addClass('is-active');
+            }
+
+            // 【追加】切り替え後に目次を再生成
+            // fadeIn(300) 完了後に実行するため 320ms 待つ
+            // isEnhanced を直接渡すことで :visible の誤判定を回避
+            setTimeout(function() {
+                generateFloatingTOC();
+                setupFloatingTOC_SP();
+            }, 320);
+        }
+
+        var savedState = localStorage.getItem(storageKey);
+        var isEnhanced = savedState === null ? true : savedState === 'true';
+        applyState(isEnhanced);
+
+        $(document).off('click', '#content-toggler').on('click', '#content-toggler', function() {
+            var $a = $('.content-a');
+            var nextIsEnhanced = !$a.is(':visible');
+            localStorage.setItem(storageKey, nextIsEnhanced);
+            applyState(nextIsEnhanced);
+        });
+    }
+}
+// ============================================================
+//↑ 3. コンテンツ表示切り替え（通常版/強化版）
+// ============================================================
+
+  
+// ============================================================
+// ↓4. WikiDB検索結果を col[Wtx] 昇順でソート
+// ============================================================
+function sortWikiDbByWgy() {
+    console.log("▼ sortWikiDbByWgy 開始");
+
+    var $parent = $('#wikidb-list');
+    var $items  = $parent.children('.wikidb-item');
+
+    console.log("取得件数:", $items.length);
+
+    if ($items.length === 0) return;
+
+    var sorted = $items.get().sort(function(a, b) {
+        var av = Number($(a).data('wgy')) || 0;
+        var bv = Number($(b).data('wgy')) || 0;
+        // ★ここだけ変更
+        return wgySortAsc ? av - bv : bv - av;
+    });
+
+    $parent.empty().append(sorted);
+
+    console.log("▲ sortWikiDbByWgy 完了",
+        wgySortAsc ? "（昇順）" : "（降順）"
+    );
+}
+//スイッチイベント追加
+$(document).on('click', '#wgy-sort-btn', function() {
+    // 昇順／降順を反転
+    wgySortAsc = !wgySortAsc;
+
+    // 再ソート
+    sortWikiDbByWgy();
+
+    // ボタン表示更新
+    $(this).text(
+        wgySortAsc ? 'Wgy 昇順 ▲' : 'Wgy 降順 ▼'
+    );
+});
+
+// ============================================================
+// ↑4. WikiDB検索結果を col[Wtx] 昇順でソート
+// ============================================================
+  
+// ============================================================
+// ↓4.1 最終更新日をページに表示
+// ============================================================
+function showLastModified() {
+  const script = document.querySelector('script[type="application/ld+json"]');
+  if (!script) return;
+
+  try {
+    const data = JSON.parse(script.textContent);
+    if (!data.dateModified) return;
+
+    const d = new Date(data.dateModified);
+    const now = new Date();
+
+    // ■ 経過日数
+    const diffDays = (now - d) / (1000 * 60 * 60 * 24);
+
+    const formatted =
+      `${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()} ` +
+      `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+
+    const h1 = document.querySelector('.main_content h1');
+    if (!h1) return;
+
+    // カウンター
+    const counterSpan = document.querySelector('.page-counter-data .plugin_counter');
+    const counterNum = counterSpan ? counterSpan.textContent.trim() : null;
+
+    let el = document.getElementById("lastmod");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "lastmod";
+      el.className = "page-meta";
+      h1.insertAdjacentElement('afterend', el);
+    }
+
+    // =========================
+    // ■ アラート判定ここ
+    // =========================
+    let alertHTML = "";
+
+    if (diffDays >= 180) {
+ 	 alertHTML = `<span class="old-update">⚠ 半年以上前の記事</span>`;
+	} else if (diffDays <= 7) {
+	 alertHTML = `<span class="new-update">🆕 NEW</span>`;
+	}
+    // =========================
+
+	el.innerHTML =
+	  alertHTML +
+ 	 `<span class="lastmod-date">🕐 最終更新：${formatted}</span>` +
+	  (counterNum ? `<span class="lastmod-counter">👁 ${counterNum}</span>` : "");
+
+  } catch(e) {
+    console.error(e);
+  }
+}
+// ============================================================
+// ↑4.1 最終更新日をページに表示
+// ============================================================
+// ============================================================
+// ↓4.2 部分編集範囲の表示
+function setupAreaedit() {
+  const main = document.querySelector('#main_content, .main_content');
+  if (!main) return;
+
+  const allBtns = [...main.querySelectorAll('.uk-text-right a[href*="edit"][href*="line="]')];
+
+  allBtns.forEach(btn => {
+    const start = btn.closest('.uk-text-right');
+    if (!start || start.closest('.areaedit-wrap')) return;
+
+    const parent = start.parentNode;
+    const wrapper = document.createElement('div');
+    wrapper.className = 'areaedit-wrap';
+    parent.insertBefore(wrapper, start);
+    wrapper.appendChild(start);
+
+    let el = wrapper.nextElementSibling;
+    while (el) {
+      // ae-endで停止・削除
+      if (el.classList.contains('ae-end')) {
+        el.remove();
+        break;
+      }
+      // 次の編集ボタン（直接含む）で停止
+      if (el.classList.contains('uk-text-right') && el.querySelector('a[href*="line="]')) break;
+      // 内部に編集ボタンを含む要素で停止（plugin_includeは含まない）
+      if (!el.classList.contains('plugin') && el.querySelector('.uk-text-right a[href*="line="]')) break;
+
+      // content-a/b・preは停止
+      if (el.classList.contains('content-a') || el.classList.contains('content-b')) break;
+      if (el.tagName === 'PRE') break;
+
+      const next = el.nextElementSibling;
+      wrapper.appendChild(el);
+      el = next;
+    }
+  });
+}
+// ============================================================
+// ↑4.2 部分編集範囲の表示
+// ============================================================
+// ============================================================
+// ↓4.3 タグ検索結果に概要を自動挿入_閲覧数が不要に増えそうなので一旦凍結
+// ============================================================
+async function injectPageSummaries() {
+	const links = document.querySelectorAll('.summary-inject .plugin_list_by_tagsearch a');
+    if (links.length === 0) return;
+
+    const CACHE_KEY = 'summary_cache_v1';
+    const CACHE_TTL = 24 * 60 * 60 * 1000; // 24時間
+
+    let cache = {};
+    try {
+        const raw = localStorage.getItem(CACHE_KEY);
+        if (raw) {
+            const obj = JSON.parse(raw);
+            if (Date.now() - obj._ts < CACHE_TTL) cache = obj.data;
+        }
+    } catch(e) {}
+
+    let updated = false;
+
+    for (const link of links) {
+        const url = 'https://wiki3.jp' + link.getAttribute('href');
+
+        // キャッシュにあればfetchしない
+        if (cache[url] !== undefined) {
+            if (cache[url]) {
+                const container = document.createElement('div');
+                container.className = 'injected-summary';
+                container.innerHTML = cache[url];
+                link.closest('li').appendChild(container);
+            }
+            continue;
+        }
+
+        try {
+            const res = await fetch(url);
+            const text = await res.text();
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(text, 'text/html');
+            const summary = doc.querySelector('.page-summary');
+            const html = summary ? summary.innerHTML : '';
+            cache[url] = html;
+            updated = true;
+
+            if (html) {
+                const container = document.createElement('div');
+                container.className = 'injected-summary';
+                container.innerHTML = html;
+                link.closest('li').appendChild(container);
+            }
+        } catch(e) {
+            console.warn('概要取得失敗:', url, e);
+        }
+    }
+
+    if (updated) {
+        try {
+            localStorage.setItem(CACHE_KEY, JSON.stringify({ _ts: Date.now(), data: cache }));
+        } catch(e) {}
+    }
+}
+// ============================================================
+// ↑4.3 タグ検索結果に概要を自動挿入_閲覧数が不要に増えそうなので一旦凍結
+// ============================================================
+// ============================================================
+// ↓5. 特定ワードボタン化（HTMLデータ読み込み版）
+// ============================================================
+function replaceKeywordsToButtons() {
+    var $content = $('#main_content');
+    if ($content.length === 0) return;
+
+    // 1. 左メニューの.is-footnote-dataからキーワードリストを動的に作成
+    var keywordList = {};
+    $('.is-footnote-data').each(function() {
+        var $ps = $(this).find('p');
+        if ($ps.length >= 2) {
+            var word = $ps.eq(0).text().trim(); // [即効] など
+            var desc = $ps.eq(1).text().trim(); // 説明文
+            if (word) {
+                keywordList[word] = desc;
+            }
+        }
+    });
+
+    // キーワードが空なら処理終了
+    if (Object.keys(keywordList).length === 0) return;
+
+    // 2. 本文内のテキストノードを走査して置換
+    $content.find('*').contents().filter(function() {
+        // テキストノードであり、かつ既にリンクや特定のクラスに囲まれていないものを抽出
+        return this.nodeType === 3 && $(this).parent().closest('a, .popup-word, script, style').length === 0;
+    }).each(function() {
+        var content = this.nodeValue;
+        var hasMatch = false;
+
+        for (var word in keywordList) {
+            // content（テキスト）の中にキーワードが含まれているかチェック
+            if (content.indexOf(word) !== -1) {
+                var escapedWord = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                var regex = new RegExp('(' + escapedWord + ')', 'g');
+                
+                // 置換処理（クラス名：popup-word-style）
+                content = content.replace(regex, '<a href="#footnote_auto" class="popup-word popup-word-style" title="' + keywordList[word] + '">$1</a>');
+                hasMatch = true;
+            }
+        }
+
+        // マッチした場合のみ、テキストノードをHTML要素（aタグ含む）に差し替え
+        if (hasMatch) {
+            $(this).replaceWith(content);
+        }
+    });
+}
+// ============================================================
+// ↑5. 特定ワードボタン化（HTMLデータ読み込み版）
+// ============================================================
+
+  // 各機能を遅延実行
+    setTimeout(function() {
+        generateFloatingTOC();　    //
+        setupContentToggler();　    //
+        setupFloatingTOC_SP();　    //
+      　sortWikiDbByWgy();   　     //
+      　replaceKeywordsToButtons(); //
+        showLastModified();         // ←260314ここを追加
+        setupAreaedit(); //
+        injectPageSummaries(); //
+
+    }, initDelay);
+});
+
+
+/* =========================================
+   ↓ 脚注 ＆ 特定ワード共通の動作（既存のものを流用・拡張）
+   //↓ 共通クリックイベント（位置調整機能付き）
+   //========================================= */
+document.addEventListener('click', function(e) {
+    var target = e.target.closest('a[href^="#footnote_"], .popup-word');
+    if (!target) return;
+
+    if (target.classList.contains('is-active')) return;
+    e.preventDefault();
+
+    // 他を閉じる
+    document.querySelectorAll('a[href^="#footnote_"], .popup-word').forEach(el => {
+        el.classList.remove('is-active');
+        var oldTip = el.querySelector('.custom-tooltip');
+        if (oldTip) oldTip.remove();
+    });
+
+    target.classList.add('is-active');
+
+    var tip = document.createElement('span');
+    tip.className = 'custom-tooltip';
+    tip.innerText = target.getAttribute('title');
+    target.style.position = 'relative'; // 基準点を親に固定
+    target.appendChild(tip);
+
+    // --- 【重要】位置調整ロジック（強制書き換え） ---
+    var gap = 15; // 画面端からの余裕
+    var rect = tip.getBoundingClientRect();
+    var screenWidth = window.innerWidth;
+
+    // 左端にはみ出している場合
+    if (rect.left < gap) {
+        var shiftLeft = gap - rect.left;
+        // transformのtranslateX(-50%)を打ち消しつつ、右へずらす
+        tip.style.setProperty('left', 'calc(50% + ' + shiftLeft + 'px)', 'important');
+    } 
+    // 右端にはみ出している場合
+    else if (rect.right > screenWidth - gap) {
+        var shiftRight = rect.right - (screenWidth - gap);
+        // 左へずらす
+        tip.style.setProperty('left', 'calc(50% - ' + shiftRight + 'px)', 'important');
+    }
+
+    // 矢印の位置をボタンの中央に固定
+    var targetCenter = target.offsetWidth / 2;
+    var tipRect = tip.getBoundingClientRect();
+    var targetRect = target.getBoundingClientRect();
+    var arrowPos = targetRect.left - tipRect.left + targetCenter;
+    tip.style.setProperty('--arrow-left', arrowPos + 'px');
+    // --- ここまで ---
+
+    var closePopup = function(event) {
+        if (!target.contains(event.target)) {
+            target.classList.remove('is-active');
+            tip.remove();
+            document.removeEventListener('click', closePopup);
+        }
+    };
+    setTimeout(() => document.addEventListener('click', closePopup), 10);
+});
+/* =========================================
+   ↑脚注タップ時の挙動変更
+   ========================================= */
+
+
+
+
+(function () {
+
+/* ============================================================
+  設定
+============================================================ */
+
+const SKILL_CACHE_KEY  = "skill_data_cache_v3";
+const ENEMY_CACHE_KEY  = "enemy_data_cache_v3";
+const CACHE_TTL_MS     = 72 * 60 * 60 * 1000;
+
+const SKILL_TARGET_WORD  = "";
+const SKILL_HALT_WORD    = "SKILLBREAK";
+const DECK_TARGET_WORD   = "";
+const DECK_HALT_WORD     = "DECKBREAK";
+
+// スキル名リンク化の除外フレーズ（スキルとして検出されるが除外したい語）
+const EXCLUDE_SKILL_PHRASES  = ["自傷", "ガードマン", "補給する", "圧倒的", "自己増殖", "喚起す"];
+// 敵名リンク化の除外フレーズ（敵として検出されるが除外したい語）
+const EXCLUDE_ENEMY_PHRASES  = [];
+
+const TRIGGER_RE         = /\{\{デッキ:([^}:]+)(:強化版)?\}\}/g;
+
+const getRoot = () => document.querySelector(".uk-width-medium-2-3, .uk-width-2-3, #main_content") || document.body;
+
+/* ============================================================
+  ユーティリティ
+============================================================ */
+
+const esc      = s => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const escHtml  = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+function isEditContext() {
+    return location.href.includes("/edit")
+        || location.href.includes("/setting")
+        || location.href.includes("/pageList")
+        || document.title.includes("ページ編集画面")
+        || document.title.includes("左メニュー")
+        || !!document.querySelector("#edit_form, .cke_editable, #wiki_header_dropdown_nav_newpage");
+}
+
+function textContains(word) {
+    const area = document.querySelector("#main_content") || document.body;
+    return area.textContent.includes(word);
+}
+
+/* ============================================================
+  キャッシュ
+============================================================ */
+
+function loadCache(key) {
+    try {
+        const raw = localStorage.getItem(key);
+        if (!raw) return null;
+        const obj = JSON.parse(raw);
+        if (Date.now() - obj._ts > CACHE_TTL_MS) {
+            localStorage.removeItem(key);
+            return null;
+        }
+        return obj.data;
+    } catch (e) {
+        return null;
+    }
+}
+
+function saveCache(key, data) {
+    try {
+        localStorage.setItem(key, JSON.stringify({ _ts: Date.now(), data }));
+    } catch (e) {}
+}
+
+/* ============================================================
+  データ構築
+============================================================ */
+
+function buildSkillMap() {
+    let map = loadCache(SKILL_CACHE_KEY);
+    if (map) return map;
+
+    map = {};
+    const urlToCleanNames = {};
+
+    document.querySelectorAll("#wiki_menu .is-skill-data").forEach(c => {
+        const ps = c.querySelectorAll("p");
+        if (ps.length < 5) return;
+
+        const displayName = ps[0].innerText.trim();
+        const cleanName   = displayName.replace(/\+/g, "");
+        const urlName     = ps[ps.length - 6]?.innerText.trim() || displayName;
+        const imgUrl      = c.querySelector("img")?.src || "";
+
+        const owners = [ps[ps.length-5], ps[ps.length-4], ps[ps.length-3], ps[ps.length-2], ps[ps.length-1]]
+            .map(p => (p?.innerText.trim() || "").replace(/^[①②③④⑤⑥⑦⑧⑨⑩\d\s。、・]+/, "").trim())
+            .filter(Boolean);
+
+        const dataObj = {
+            name:    displayName,
+            imgUrl,
+            linkUrl: "https://wiki3.jp/roguelikecardbattle/name/" + encodeURIComponent(urlName),
+            owners,
+            normal:  { zoku: ps[1]?.innerText.trim() || "", meta: ps[2]?.innerText.trim() || "", tx: ps[3]?.innerHTML.trim() || "" },
+            plus:    ps.length >= 8
+                ? { zoku: ps[4]?.innerText.trim() || "", meta: ps[5]?.innerText.trim() || "", tx: ps[6]?.innerHTML.trim() || "" }
+                : null
+        };
+
+        if (!map[cleanName]) map[cleanName] = [];
+        map[cleanName].push(dataObj);
+
+        if (urlName !== "バニラスキル") {
+            if (!urlToCleanNames[urlName]) urlToCleanNames[urlName] = [];
+            if (!urlToCleanNames[urlName].includes(cleanName)) urlToCleanNames[urlName].push(cleanName);
+        }
+    });
+
+    // 同URLのスキルをマージ
+    Object.values(urlToCleanNames).forEach(names => {
+        if (names.length < 2) return;
+        const merged = [];
+        names.forEach(n => (map[n] || []).forEach(d => { if (!merged.includes(d)) merged.push(d); }));
+        names.forEach(n => { map[n] = merged; });
+    });
+
+    if (Object.keys(map).length > 0) saveCache(SKILL_CACHE_KEY, map);
+    return map;
+}
+
+function buildEnemyMap() {
+    let map = loadCache(ENEMY_CACHE_KEY);
+    if (map) return map;
+
+    map = {};
+
+    document.querySelectorAll("#wiki_menu .is-enemy-data").forEach(c => {
+        const ps = c.querySelectorAll("p");
+        const name = ps[0]?.innerText.trim();
+        if (!name) return;
+
+        const imgUrl   = ps[1]?.querySelector("img")?.src || "";
+        const category = ps[2]?.innerText.trim() || "";
+        const skills   = [];
+
+        for (let i = 4; i + 1 < ps.length; i += 2) {
+            const sName = ps[i].innerText.trim();
+            if (sName) skills.push({ skillName: sName, count: parseInt(ps[i + 1].innerText.trim(), 10) || 1 });
+        }
+
+        if (!map[name]) map[name] = [];
+        map[name].push({ imgUrl, category, skills });
+    });
+
+    if (Object.keys(map).length > 0) saveCache(ENEMY_CACHE_KEY, map);
+    return map;
+}
+
+/* ============================================================
+  テキストノード処理（スキル・敵名リンク化）
+============================================================ */
+
+function makeLinker(skillMap, enemyMap, excludeSkillPhrases, excludeEnemyPhrases) {
+    const skillNames = Object.keys(skillMap).sort((a, b) => b.length - a.length);
+    const enemyNames = Object.keys(enemyMap).sort((a, b) => b.length - a.length);
+
+    // スキル・敵それぞれの除外リスト（長さ降順）
+    const skillExcludes = (excludeSkillPhrases || []).filter(Boolean).sort((a, b) => b.length - a.length);
+    const enemyExcludes = (excludeEnemyPhrases || []).filter(Boolean).sort((a, b) => b.length - a.length);
+
+    // 正規表現に渡すすべての語（除外語は先に並べてマッチさせ、後続の置換で素通しする）
+    const allTokens = [
+        ...skillExcludes.map(esc),
+        ...enemyExcludes.map(esc),
+        ...skillNames.map(esc),
+        ...enemyNames.map(esc)
+    ];
+
+    const combinedRe = new RegExp("(" + allTokens.join("|") + ")", "g");
+    const testRe     = new RegExp("(" + allTokens.join("|") + ")");
+
+    // 高速判定用セット
+    const skillExcludeSet = new Set(skillExcludes);
+    const enemyExcludeSet = new Set(enemyExcludes);
+
+    function linkifyNode(node) {
+        const parent = node.parentElement;
+        if (!parent) return;
+        if (parent.closest("h1,h2,h3,h4,h5,h6,.uk-h1,.uk-h2,.uk-h3")) return;
+        if (parent.closest("[style*='xx-large'],[style*='x-large']")) return;
+        if (parent.closest(".uk-text-right,.uk-text-small")) return;
+        if (parent.closest("#wiki_menu,#floating-toc,.skill-trigger,.enemy-trigger,#edit_form,.uk-navbar,.popup-word,.enemy-skill-table-wrapper")) return;
+        if (/color\s*:/i.test(parent.getAttribute("style") || "")) return;
+        if (/tc_/.test(parent.className || "")) return;
+        if (["I", "EM", "MARK", "U"].includes(parent.tagName)) return;
+        if (!testRe.test(node.nodeValue)) return;
+
+        combinedRe.lastIndex = 0;
+        const span = document.createElement("span");
+        span.innerHTML = node.nodeValue.replace(combinedRe, match => {
+            // スキル除外語：skillMapとしてはリンク化しないが、enemyMapに存在すれば敵リンクにする
+            if (skillExcludeSet.has(match)) {
+                if (enemyMap[match]) return `<a href="javascript:void(0);" class="enemy-trigger popup-word-style" data-enemy="${match}">${match}</a>`;
+                return match;
+            }
+            // 敵除外語：enemyMapに存在してもリンク化しない
+            if (enemyExcludeSet.has(match)) return match;
+            // 通常リンク化
+            if (skillMap[match]) return `<a href="javascript:void(0);" class="skill-trigger popup-word-style" data-skill="${match}">${match}</a>`;
+            if (enemyMap[match]) return `<a href="javascript:void(0);" class="enemy-trigger popup-word-style" data-enemy="${match}">${match}</a>`;
+            return match;
+        });
+        node.parentNode.replaceChild(span, node);
+    }
+
+    return linkifyNode;
+}
+
+function walkAndLink(root, linkifyNode) {
+    root.normalize();
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null, false);
+    const nodes  = [];
+    let node;
+    while (node = walker.nextNode()) nodes.push(node);
+    nodes.forEach(n => linkifyNode(n));
+}
+
+function observeAndLink(root, linkifyNode) {
+    new MutationObserver(mutations => {
+        const nodes = [];
+        mutations.forEach(m => {
+            m.addedNodes.forEach(n => {
+                if (n.parentElement?.closest("span, a.skill-trigger, a.enemy-trigger, .enemy-skill-table-wrapper")) return;
+                if (n.nodeType === 3) { nodes.push(n); return; }
+                if (n.nodeType === 1) {
+                    const walker = document.createTreeWalker(n, NodeFilter.SHOW_TEXT, null, false);
+                    let t;
+                    while (t = walker.nextNode()) nodes.push(t);
+                }
+            });
+        });
+        nodes.forEach(n => linkifyNode(n));
+    }).observe(root, { childList: true, subtree: true });
+}
+
+/* ============================================================
+  {{敵スキル表}} テンプレート展開
+============================================================ */
+
+function expandEnemySkillTables(skillMap, enemyMap) {
+    const root = getRoot(); root.normalize();
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null, false);
+    const hits   = [];
+    let node;
+    while (node = walker.nextNode()) {
+        if (node.parentElement?.closest("#wiki_menu,.enemy-skill-table-wrapper,#edit_form")) continue;
+        TRIGGER_RE.lastIndex = 0;
+        if (TRIGGER_RE.test(node.nodeValue)) hits.push(node);
+    }
+
+    hits.forEach(textNode => {
+        TRIGGER_RE.lastIndex = 0;
+        const frag = document.createDocumentFragment();
+        let lastIdx = 0, m;
+        while ((m = TRIGGER_RE.exec(textNode.nodeValue)) !== null) {
+            if (m.index > lastIdx) frag.appendChild(document.createTextNode(textNode.nodeValue.slice(lastIdx, m.index)));
+            frag.appendChild(buildEnemyTable(m[1].trim(), enemyMap, skillMap, !!m[2]));
+            lastIdx = m.index + m[0].length;
+        }
+        if (lastIdx < textNode.nodeValue.length) frag.appendChild(document.createTextNode(textNode.nodeValue.slice(lastIdx)));
+        textNode.parentNode.replaceChild(frag, textNode);
+    });
+}
+
+function buildEnemyTable(enemyName, enemyMap, skillMap, isPlus) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "enemy-skill-table-wrapper";
+
+    const skillSetList = enemyMap[enemyName];
+    if (!skillSetList || skillSetList.length === 0) {
+        wrapper.innerHTML = `<div class="est-notfound">【敵スキル表】「${escHtml(enemyName)}」のデータが見つかりません。</div>`;
+        return wrapper;
+    }
+
+    const header = document.createElement("div");
+    header.className   = isPlus ? "est-header est-header-plus" : "est-header";
+    header.textContent = `${enemyName} のデッキ${isPlus ? "（強化版）" : ""}`;
+    wrapper.appendChild(header);
+
+    skillSetList.forEach((variantData, variantIdx) => {
+        const skillEntries = Array.isArray(variantData) ? variantData : (variantData.skills || []);
+
+        if (skillSetList.length > 1) {
+            const varLabel = document.createElement("div");
+            varLabel.className   = "est-variant-label";
+            varLabel.textContent = `パターン ${variantIdx + 1}`;
+            wrapper.appendChild(varLabel);
+        }
+
+        const table = document.createElement("table");
+        table.className = isPlus ? "est-table est-table-plus" : "est-table";
+
+        table.innerHTML = `<thead><tr>
+            <th class="est-th-icon"></th>
+            <th class="est-th-zoku">属性</th>
+            <th class="est-th-effect">説明</th>
+        </tr></thead>`;
+
+        const tbody = document.createElement("tbody");
+
+        skillEntries.forEach(entry => {
+            const sKey       = entry.skillName.replace(/\+/g, "");
+            const skillDataList = skillMap[sKey] || skillMap[entry.skillName] || null;
+            const skillData  = skillDataList
+                ? (skillDataList.find(d => d.owners?.some(o => o.includes(enemyName)))
+                || skillDataList.find(d => !d.owners?.length)
+                || skillDataList[0])
+                : null;
+            const d = (isPlus && skillData?.plus) ? skillData.plus : skillData?.normal || null;
+
+            const tr = document.createElement("tr");
+
+            const imgCell  = document.createElement("td");
+            imgCell.className = "est-td-icon";
+            const iconWrap = document.createElement("a");
+            iconWrap.className = "est-icon-wrap";
+            if (skillData) { iconWrap.href = skillData.linkUrl;}
+            if (skillData?.imgUrl) {
+                const img = document.createElement("img");
+                img.src = skillData.imgUrl; img.className = "est-skill-icon";
+                iconWrap.appendChild(img);
+            }
+            const countLabel = document.createElement("span");
+            countLabel.className   = "est-icon-count";
+            countLabel.textContent = "×" + entry.count;
+            iconWrap.appendChild(countLabel);
+            imgCell.appendChild(iconWrap);
+
+            const zokuCell = document.createElement("td");
+            zokuCell.className   = "est-td-zoku";
+            zokuCell.textContent = d ? d.zoku : "—";
+
+            const effectCell = document.createElement("td");
+            effectCell.className = "est-td-effect";
+            if (d?.tx) effectCell.innerHTML = d.tx;
+            else { effectCell.textContent = "（データなし）"; effectCell.style.color = "#999"; }
+
+            tr.append(imgCell, zokuCell, effectCell);
+            tbody.appendChild(tr);
+        });
+
+        table.appendChild(tbody);
+        wrapper.appendChild(table);
+    });
+
+    return wrapper;
+}
+
+/* ============================================================
+  スキルポップアップ
+============================================================ */
+
+function initSkillModal(skillMap, urlSameGroups) {
+    const modal = document.createElement("div");
+    modal.id = "skill-card-modal";
+    modal.style.cssText = "position:fixed;z-index:10100;display:none;";
+    document.body.appendChild(modal);
+
+    let activeTrigger = null, hideTimer = null, isLocked = false;
+
+    function render(skillName, currentIndex, plusStateArray) {
+        const dataList = skillMap[skillName];
+        if (!dataList?.length) return;
+        if (!plusStateArray) plusStateArray = dataList.map(() => false);
+        currentIndex ??= 0;
+
+        const total    = dataList.length;
+        const pagerHtml = total > 1 ? `
+            <div class="modal-pager" style="font-size:1.25em;display:flex;">
+                <div class="pager-area pager-prev" data-dir="-1" style="flex:1;display:flex;align-items:center;justify-content:flex-start;cursor:${currentIndex===0?"default":"pointer"};opacity:${currentIndex===0?"0.2":"1"};padding:4px 8px;">◀</div>
+                <div class="pager-label" style="flex:0 0 auto;display:flex;align-items:center;padding:4px 8px;">${currentIndex+1} / ${total}</div>
+                <div class="pager-area pager-next" data-dir="1" style="flex:1;display:flex;align-items:center;justify-content:flex-end;cursor:${currentIndex===total-1?"default":"pointer"};opacity:${currentIndex===total-1?"0.2":"1"};padding:4px 8px;">▶</div>
+            </div>` : "";
+
+        const allCardsHtml = dataList.map((cardData, idx) => {
+            const isCurrent = idx === currentIndex;
+            const usePlus   = plusStateArray[idx] && cardData.plus;
+            const cardD     = usePlus ? cardData.plus : cardData.normal;
+            return `<div class="modal-card" data-card-index="${idx}" style="visibility:${isCurrent?"visible":"hidden"};position:${isCurrent?"relative":"absolute"};top:0;left:0;width:100%;">
+                <div class="modal-sw-container">
+                    <div class="sw-btn ${!usePlus?"active-n":""}" data-type="n" data-index="${idx}">通常版</div>
+                    <div class="sw-btn ${usePlus?"active-p":""}" data-type="p" data-index="${idx}" ${!cardData.plus?'style="opacity:0.2;"':""}>強化版</div>
+                </div>
+                <div class="modal-header">
+                    <img src="${cardData.imgUrl}" class="modal-icon">
+                    <div class="modal-title-box">
+                        <div class="modal-name ${usePlus?"type-plus":"type-normal"}">${cardData.name}</div>
+                        <div class="modal-meta">${cardD.zoku} / ${cardD.meta}</div>
+                    </div>
+                </div>
+                <div class="modal-text">${cardD.tx}</div>
+                <a href="${cardData.linkUrl}" class="modal-link" ${!isCurrent?'tabindex="-1"':""}>詳細ページへ</a>
+            </div>`;
+        }).join("");
+
+        modal.innerHTML = `${pagerHtml}<div class="modal-cards-wrapper" style="position:relative;">${allCardsHtml}</div>`;
+        modal.classList.toggle("modal-plus", !!(plusStateArray[currentIndex] && dataList[currentIndex].plus));
+
+        modal.querySelectorAll(".pager-area").forEach(arrow => {
+            arrow.onclick = e => {
+                e.stopPropagation();
+                const newIdx = currentIndex + parseInt(arrow.dataset.dir, 10);
+                if (newIdx < 0 || newIdx >= total) return;
+                isLocked = true; stopHideTimer();
+                render(skillName, newIdx, plusStateArray);
+                updatePosition(activeTrigger);
+            };
+        });
+
+        modal.querySelectorAll(".sw-btn").forEach(btn => {
+            btn.onclick = e => {
+                e.stopPropagation();
+                const idx = parseInt(btn.dataset.index, 10);
+                if (idx !== currentIndex) return;
+                if (btn.dataset.type === "p" && !dataList[idx].plus) return;
+                isLocked = true; stopHideTimer();
+                const isPlus = btn.dataset.type === "p";
+                const newPlusState = [...plusStateArray];
+                const sameGroup = urlSameGroups.find(g => g.includes(skillName));
+                if (sameGroup) newPlusState.fill(isPlus);
+                else newPlusState[idx] = isPlus;
+                render(skillName, currentIndex, newPlusState);
+                updatePosition(activeTrigger);
+            };
+        });
+    }
+
+    function updatePosition(trg) {
+        if (!trg) return;
+        activeTrigger = trg;
+        const rect = trg.getBoundingClientRect();
+        modal.style.display = "block";
+        const mH = modal.offsetHeight, mW = modal.offsetWidth;
+        const winH = window.innerHeight, winW = window.innerWidth;
+        let top  = rect.bottom + 10;
+        if (top + mH > winH) top = rect.top - mH - 10;
+        if (top < 10) top = 10;
+        if (top + mH > winH) top = winH - mH - 10;
+        let left = rect.left;
+        if (left + mW > winW) left = winW - mW - 10;
+        if (left < 10) left = 10;
+        modal.style.top = top + "px"; modal.style.left = left + "px";
+    }
+
+    const stopHideTimer  = () => { if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; } };
+    const startHideTimer = () => {
+        if (isLocked) return;
+        stopHideTimer();
+        hideTimer = setTimeout(() => { modal.style.display = "none"; activeTrigger = null; isLocked = false; }, 200);
+    };
+
+    window.addEventListener("scroll", () => {
+        if (modal.style.display === "block") { stopHideTimer(); modal.style.display = "none"; activeTrigger = null; isLocked = false; }
+    }, { passive: true });
+
+    document.addEventListener("click", e => {
+        const trg = e.target.closest(".skill-trigger");
+        if (trg) {
+            e.preventDefault(); e.stopPropagation();
+            isLocked = false; stopHideTimer();
+            render(trg.dataset.skill, 0, null); updatePosition(trg);
+        } else if (!e.target.closest("#skill-card-modal")) {
+            modal.style.display = "none"; isLocked = false;
+        }
+    });
+
+    document.addEventListener("mouseover", e => {
+        const trg = e.target.closest(".skill-trigger");
+        if (trg || e.target.closest("#skill-card-modal")) {
+            if (trg) isLocked = false;
+            if (modal.style.display === "block") stopHideTimer();
+        } else if (modal.style.display === "block") {
+            startHideTimer();
+        }
+    });
+
+    modal.addEventListener("mouseenter", () => { isLocked = false; stopHideTimer(); });
+    modal.addEventListener("mouseleave", startHideTimer);
+
+    // 外部からの呼び出し用
+    window._skillCardShow = function (skillName, x, y, preferEnemyName) {
+        if (!skillMap[skillName]) return;
+        isLocked = true; stopHideTimer();
+        const dataList = skillMap[skillName];
+        let startIndex = 0;
+        if (preferEnemyName) {
+            const idx = dataList.findIndex(d => d.owners?.some(o => o.includes(preferEnemyName)));
+            if (idx !== -1) startIndex = idx;
+        }
+        render(skillName, startIndex, null);
+        modal.style.display = "block";
+        const mH = modal.offsetHeight, mW = modal.offsetWidth;
+        const winH = window.innerHeight, winW = window.innerWidth;
+        const enemyModal = document.getElementById("enemy-card-modal");
+        const eRect = enemyModal && enemyModal.style.display !== "none" ? enemyModal.getBoundingClientRect() : null;
+        let top, left;
+        if (eRect) {
+            left = Math.min(Math.max(10, eRect.left), winW - mW - 10);
+            const topBelow = eRect.bottom + 10;
+            const topAbove = eRect.top - mH - 10;
+            if (topBelow + mH <= winH - 10) {
+                top = topBelow;
+            } else if (topAbove >= 10) {
+                top = topAbove;
+            } else {
+                top = (eRect.top > winH - eRect.bottom)
+                    ? Math.max(10, eRect.top - mH - 10)
+                    : Math.min(eRect.bottom + 10, winH - mH - 10);
+            }
+        } else {
+            left = Math.max(10, (winW - mW) / 2);
+            top  = Math.max(10, (winH - mH) / 2);
+        }
+        modal.style.top = top + "px"; modal.style.left = left + "px";
+        activeTrigger = null;
+    };
+}
+
+/* ============================================================
+  敵ポップアップ
+============================================================ */
+
+function initEnemyModal(enemyMap, skillMap) {
+    const modal = document.createElement("div");
+    modal.id = "enemy-card-modal";
+    modal.style.cssText = "position:fixed;z-index:10000;display:none;";
+    document.body.appendChild(modal);
+
+    let activeTrigger = null, hideTimer = null, isLocked = false;
+
+    function render(enemyName) {
+        const skillSetList = enemyMap[enemyName];
+        if (!skillSetList?.length) return;
+
+        const firstVariant = skillSetList[0];
+        // 旧形式キャッシュ検知時はリロード
+        if (Array.isArray(firstVariant)) {
+            localStorage.removeItem(ENEMY_CACHE_KEY);
+            location.reload();
+            return;
+        }
+
+        const { imgUrl, category } = firstVariant;
+        const isIgyo    = category === "異形";
+        const deckLabel = isIgyo ? "初期デッキ" : "スキルデッキ";
+
+        const imgHtml = imgUrl
+            ? `<div class="enemy-modal-chara-wrap"><img src="${imgUrl}" class="enemy-modal-chara-img"></div>`
+            : "";
+
+        const variantsHtml = skillSetList.map((variantData, variantIdx) => {
+            const skillEntries = Array.isArray(variantData) ? variantData : (variantData.skills || []);
+            const variantLabelHtml = skillSetList.length > 1
+                ? `<div class="enemy-modal-variant-label">パターン ${variantIdx + 1}</div>` : "";
+            const rowsHtml = skillEntries.map(entry => {
+                const sKey = entry.skillName.replace(/\+/g, "");
+                const skillDataList = skillMap[sKey] || skillMap[entry.skillName] || null;
+                const skillData = skillDataList
+                    ? (skillDataList.find(d => d.owners?.some(o => o.includes(enemyName)))
+                    || skillDataList.find(d => !d.owners?.length)
+                    || skillDataList[0])
+                    : null;
+                const iconHtml = skillData?.imgUrl
+                    ? `<img src="${skillData.imgUrl}" class="enemy-modal-skill-icon">`
+                    : `<span class="enemy-modal-skill-icon-placeholder"></span>`;
+                const hasSkillCard = !!(skillMap[sKey] || skillMap[entry.skillName]);
+                return `<div class="enemy-modal-row${hasSkillCard ? " enemy-modal-row-clickable" : ""}" data-skill-name="${sKey}">
+                    <span class="enemy-modal-skill-icon-wrap">${iconHtml}</span>
+                    <span class="enemy-modal-skill-name">${entry.skillName}</span>
+                    <span class="enemy-modal-skill-count">×${entry.count}</span>
+                </div>`;
+            }).join("");
+            return variantLabelHtml + `<div class="enemy-modal-deck">${rowsHtml}</div>`;
+        }).join("");
+
+        modal.innerHTML = `
+            <div class="enemy-modal-top">
+                ${imgHtml}
+                <div class="enemy-modal-top-right">
+                    <div class="enemy-modal-deck-label">${deckLabel}</div>
+                    <div class="enemy-modal-name-label">${enemyName} のデッキ</div>
+                </div>
+            </div>
+            ${variantsHtml}
+            <div class="enemy-modal-page-link"><a href="https://wiki3.jp/roguelikecardbattle/name/${encodeURIComponent(enemyName)}">個別ページへ</a></div>`;
+
+        modal.querySelectorAll(".enemy-modal-row-clickable").forEach(row => {
+            row.addEventListener("click", e => {
+                e.stopPropagation();
+                if (window._skillCardShow) window._skillCardShow(row.dataset.skillName, e.clientX, e.clientY, enemyName);
+            });
+        });
+    }
+
+    function updatePosition(trg) {
+        if (!trg) return;
+        activeTrigger = trg;
+        const rect = trg.getBoundingClientRect();
+        modal.style.display = "block";
+        const mH = modal.offsetHeight, mW = modal.offsetWidth;
+        const winH = window.innerHeight, winW = window.innerWidth;
+        let top  = rect.bottom + 10;
+        if (top + mH > winH) top = rect.top - mH - 10;
+        if (top < 10) top = 10;
+        if (top + mH > winH) top = winH - mH - 10;
+        let left = rect.left;
+        if (left + mW > winW) left = winW - mW - 10;
+        if (left < 10) left = 10;
+        modal.style.top = top + "px"; modal.style.left = left + "px";
+    }
+
+    const stopHideTimer  = () => { if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; } };
+    const startHideTimer = () => {
+        if (isLocked) return;
+        stopHideTimer();
+        hideTimer = setTimeout(() => { modal.style.display = "none"; activeTrigger = null; isLocked = false; }, 200);
+    };
+
+    window.addEventListener("scroll", () => {
+        if (modal.style.display === "block") { stopHideTimer(); modal.style.display = "none"; activeTrigger = null; isLocked = false; }
+    }, { passive: true });
+
+    document.addEventListener("click", e => {
+        const trg = e.target.closest(".enemy-trigger");
+        if (trg) {
+            e.preventDefault(); e.stopPropagation();
+            isLocked = false; stopHideTimer();
+            render(trg.dataset.enemy); updatePosition(trg);
+        } else if (!e.target.closest("#enemy-card-modal")) {
+            modal.style.display = "none"; isLocked = false;
+        }
+    });
+
+    document.addEventListener("mouseover", e => {
+        const trg = e.target.closest(".enemy-trigger");
+        if (trg || e.target.closest("#enemy-card-modal") || e.target.closest("#skill-card-modal")) {
+            if (trg) isLocked = false;
+            if (modal.style.display === "block") stopHideTimer();
+        } else if (modal.style.display === "block") {
+            startHideTimer();
+        }
+    });
+
+    modal.addEventListener("mouseenter", () => { isLocked = false; stopHideTimer(); });
+    modal.addEventListener("mouseleave", startHideTimer);
+}
+
+/* ============================================================
+  エントリポイント
+============================================================ */
+
+window.addEventListener("load", function () {
+    if (isEditContext()) return;
+
+    const skillMap = buildSkillMap();
+    const enemyMap = buildEnemyMap();
+
+    // urlSameGroups（通常版/強化版切替の同期に使用）
+    const urlSameGroups = [];
+    const urlToCleanNames = {};
+    document.querySelectorAll("#wiki_menu .is-skill-data").forEach(c => {
+        const ps = c.querySelectorAll("p");
+        if (ps.length < 5) return;
+        const displayName = ps[0].innerText.trim();
+        const cleanName   = displayName.replace(/\+/g, "");
+        const urlName     = ps[ps.length - 6]?.innerText.trim() || displayName;
+        if (urlName === "バニラスキル") return;
+        if (!urlToCleanNames[urlName]) urlToCleanNames[urlName] = [];
+        if (!urlToCleanNames[urlName].includes(cleanName)) urlToCleanNames[urlName].push(cleanName);
+    });
+    Object.values(urlToCleanNames).forEach(names => {
+        if (names.length >= 2) urlSameGroups.push([...names]);
+    });
+
+    // スキルモーダル・敵モーダルを初期化（イベント登録）
+    initSkillModal(skillMap, urlSameGroups);
+    initEnemyModal(enemyMap, skillMap);
+
+    // {{敵スキル表}} テンプレート展開
+    expandEnemySkillTables(skillMap, enemyMap);
+    document.dispatchEvent(new CustomEvent("skillLinksReady"));
+
+    // テキストノードのリンク化
+    const needsSkillLink = SKILL_HALT_WORD ? !textContains(SKILL_HALT_WORD) : true;
+    const needsDeckLink  = textContains(DECK_TARGET_WORD) && (DECK_HALT_WORD ? !textContains(DECK_HALT_WORD) : true);
+
+    if (needsSkillLink || needsDeckLink) {
+        const effectiveSkillMap = needsSkillLink ? skillMap : {};
+        const effectiveEnemyMap = needsDeckLink  ? enemyMap : {};
+        if (Object.keys(effectiveSkillMap).length > 0 || Object.keys(effectiveEnemyMap).length > 0) {
+            const linkifyNode = makeLinker(
+                effectiveSkillMap,
+                effectiveEnemyMap,
+                needsSkillLink ? EXCLUDE_SKILL_PHRASES : [],
+                needsDeckLink  ? EXCLUDE_ENEMY_PHRASES : []
+            );
+            walkAndLink(getRoot(), linkifyNode);
+            observeAndLink(getRoot(), linkifyNode);
+        }
+    }
+});
+
+})();
