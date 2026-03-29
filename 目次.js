@@ -322,3 +322,10 @@ function setupEvents($headings, $commentArea) {
 // ============================================================
 // ↑2. スマホ専用UI（サイドメニュー風 ＆ 全スキャン ＆ 強力コメント検索）
 // ============================================================
+setTimeout(function(){
+
+    generateFloatingTOC();
+    setupFloatingTOC_SP();
+    setupEvents();
+
+}, 500);
