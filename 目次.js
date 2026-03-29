@@ -319,6 +319,7 @@ function setupEvents($headings, $commentArea) {
             $('#toc-target a[href="#' + activeId + '"]').addClass('active-section');
         }
     });
+    $(window).trigger('scroll.toc');
 }
 // ============================================================
 // ↑2. スマホ専用UI（サイドメニュー風 ＆ 全スキャン ＆ 強力コメント検索）
