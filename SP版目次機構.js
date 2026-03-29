@@ -1,7 +1,7 @@
 // ============================================================
 // ↓2. スマホ専用UI（サイドメニュー風 ＆ 全スキャン ＆ 強力コメント検索）
 // ============================================================
-window.setupFloatingTOC_SP = function () {
+function setupFloatingTOC_SP() {
     // 幅1230超かつ高さ700超の場合はPC版が担当するため除外
     if (window.innerWidth >= 1230 && window.innerHeight > 700) return;
     
