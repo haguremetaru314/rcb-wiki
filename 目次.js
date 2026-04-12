@@ -36,6 +36,7 @@ function generateFloatingTOC() {
 
     const $headings = $('#main_content, .main_content').find('h1, h2, h3').filter((i, el) => {
         if ($(el).hasClass('toc-ignore')) return false;
+        if (!$(el).is(':visible')) return false;
         return !(i === 0 && el.tagName.toLowerCase() === 'h1');
     });
 
