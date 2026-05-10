@@ -274,3 +274,15 @@ setTimeout(function(){
     generateFloatingTOC();
     setupFloatingTOC_SP();
 }, 500);
+
+
+// ============================================================
+// ↓ 通常版/強化版切り替え時の目次再生成
+// ============================================================
+document.addEventListener('wiki-toc-rebuild', function() {
+    if (window.innerWidth <= 1230 || window.innerHeight <= 700) {
+        setupFloatingTOC_SP();
+    } else {
+        generateFloatingTOC();
+    }
+});
