@@ -46,7 +46,7 @@ function generateFloatingTOC() {
         $el.attr('id', id);
 
         const tag = this.tagName.toLowerCase();
-        const prefix = (tag === "h2") ? "◆ " : (tag === "h3") ? "◇ " : "";
+        const prefix = (tag === "h2") ? " " : (tag === "h3") ? " " : "";
         tocHtml += `<div class="toc-item toc-${tag}"><a href="#${id}">${prefix}${$el.text().trim()}</a></div>`;
     });
 
@@ -185,7 +185,7 @@ function setupFloatingTOC_SP() {
         var id = $this.attr('id') || 'toc-anchor-sp-' + i;
         $this.attr('id', id);
         var tagName = this.tagName.toLowerCase();
-        var prefix = (tagName === "h2") ? "◆ " : (tagName === "h3") ? "◇ " : "";
+        var prefix = (tagName === "h2") ? " " : (tagName === "h3") ? " " : "";
         $target.append('<div class="toc-item toc-' + tagName + '"><a href="#' + id + '">' + prefix + $this.text().trim() + '</a></div>');
     });
 
