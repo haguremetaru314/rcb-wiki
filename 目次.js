@@ -34,16 +34,26 @@ function generateFloatingTOC() {
 
     let tocHtml = '<div class="toc-item toc-page-name"><a href="#wiki_header" id="toc-link-home">ページトップ</a></div>';
 
-    const $headings = $('#main_content, .main_content').find('h1, h2, h3').filter((i, el) => {
+    // ① 表示/非表示に関わらず、全見出しに対して一度だけIDを確定させる
+    //    (content-a側・content-b側の両方に固有のIDを振ることで、
+    //     切り替え時のID重複を防ぐ)
+    const $allHeadings = $('#main_content, .main_content').find('h1, h2, h3');
+
+    $allHeadings.each(function(i) {
+        if (!this.id) this.id = 'toc-anchor-' + i;
+    });
+
+    // ② TOCに載せるのは、その中で「今表示されている」ものだけに絞り込む
+    //    (i===0 の判定は元コードと同じく全見出し中でのインデックスを使う)
+    const $headings = $allHeadings.filter((i, el) => {
         if ($(el).hasClass('toc-ignore')) return false;
         if (!$(el).is(':visible')) return false;
         return !(i === 0 && el.tagName.toLowerCase() === 'h1');
     });
 
-    $headings.each(function(i) {
+    $headings.each(function() {
         const $el = $(this);
-        const id = $el.attr('id') || `toc-anchor-${i}`;
-        $el.attr('id', id);
+        const id = $el.attr('id');
 
         const tag = this.tagName.toLowerCase();
         const prefix = (tag === "h2") ? " " : (tag === "h3") ? " " : "";
@@ -172,7 +182,15 @@ function setupFloatingTOC_SP() {
     $target.empty();
     $target.append('<div class="toc-item toc-page-name"><a href="#wiki_header">ページトップ</a></div>');
 
-    var $headingsSP = $('#main_content, .main_content').find('h1, h2, h3').filter(function() {
+    // ① 表示/非表示に関わらず、全見出しに対して一度だけIDを確定させる
+    var $allHeadingsSP = $('#main_content, .main_content').find('h1, h2, h3');
+
+    $allHeadingsSP.each(function(i) {
+        if (!this.id) this.id = 'toc-anchor-sp-' + i;
+    });
+
+    // ② TOCに載せるのは、その中で「今表示されている」ものだけに絞り込む
+    var $headingsSP = $allHeadingsSP.filter(function() {
         if ($(this).hasClass('toc-ignore')) return false;
         if ($(this).closest('.content-a, .content-b').length > 0) {
             return $(this).closest('.content-a, .content-b').is(':visible');
@@ -180,10 +198,9 @@ function setupFloatingTOC_SP() {
         return true;
     });
 
-    $headingsSP.each(function(i) {
+    $headingsSP.each(function() {
         var $this = $(this);
-        var id = $this.attr('id') || 'toc-anchor-sp-' + i;
-        $this.attr('id', id);
+        var id = $this.attr('id');
         var tagName = this.tagName.toLowerCase();
         var prefix = (tagName === "h2") ? " " : (tagName === "h3") ? " " : "";
         $target.append('<div class="toc-item toc-' + tagName + '"><a href="#' + id + '">' + prefix + $this.text().trim() + '</a></div>');
