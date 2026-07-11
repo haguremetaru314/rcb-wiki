@@ -259,11 +259,37 @@ function setupFloatingTOC_SP() {
     }
 
     $('#sp-toc-open-btn').off('click').on('click', function() {
-        $('#floating-toc').addClass('is-open');
-        $('#sp-toc-overlay').fadeIn(200);
-        $(this).fadeOut(200);
-        $('#toc-toggle').text('×');
+    $('#floating-toc').addClass('is-open');
+    $('#sp-toc-overlay').fadeIn(200);
+    $(this).fadeOut(200);
+    $('#toc-toggle').text('×');
+
+    // ------------------------------------------------------------
+    // 開いた瞬間、現在スクロール中に該当している見出し（active-section）を
+    // TOCパネルの先頭（画面上部）に来るようスクロール位置を合わせる。
+    //
+    // is-open クラスを付けた直後はCSS側のtransition/animationで
+    // パネルがまだ画面外にいる可能性があるため、レイアウト確定後に
+    // offsetTop を読むよう requestAnimationFrame で1フレーム遅らせる。
+    // ------------------------------------------------------------
+    requestAnimationFrame(function() {
+        var $target = $('#toc-target');
+        var container = $target[0];
+        if (!container) return;
+
+        var $activeLink = $target.find('a.active-section').first();
+
+        if ($activeLink.length) {
+            var $item = $activeLink.closest('.toc-item');
+            var relTop = $item[0].offsetTop - container.offsetTop;
+            container.scrollTop = relTop;
+        } else {
+            // まだどの見出しにも到達していない（ページ最上部にいる）場合は
+            // 先頭の「ページトップ」項目が見える状態＝scrollTop 0 のままでよい
+            container.scrollTop = 0;
+        }
     });
+});
 
     $('#sp-toc-overlay, #toc-toggle').off('click').on('click', function() {
         $('#floating-toc').removeClass('is-open');
