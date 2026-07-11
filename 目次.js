@@ -263,36 +263,6 @@ function setupFloatingTOC_SP() {
     $('#sp-toc-overlay').fadeIn(200);
     $(this).fadeOut(200);
     $('#toc-toggle').text('×');
-
-    // ------------------------------------------------------------
-    // 開いた瞬間、現在スクロール中に該当している見出し（active-section）を
-    // TOCパネルの先頭（画面上部）に来るようスクロール位置を合わせる。
-    //
-    // 【重要】offsetTop / container.offsetTop を自前で計算して scrollTop に
-    // 代入するやり方は、間に挟まる要素のposition指定や、スクロール可能な
-    // 要素が #toc-target なのか親の #floating-toc なのか、といったCSS構造に
-    // 強く依存してしまい、計算がズレるとスクロールが効かなかったり
-    // 全く見当違いの位置までスクロールしてしまったりする（今回発生した
-    // 「スクロールされない」「ハイライトが大きく下にズレる」の両方が
-    // これに該当する可能性が高い）。
-    //
-    // scrollIntoView() を使えば、実際にどの祖先要素がスクロール可能かを
-    // ブラウザ側が自動判定して正しくスクロールしてくれるため、この手の
-    // ズレが原理的に起きない。
-    // ------------------------------------------------------------
-    requestAnimationFrame(function() {
-        var activeLinkEl = document.querySelector('#toc-target a.active-section');
-
-        if (activeLinkEl) {
-            activeLinkEl.scrollIntoView({
-                block: 'start',   // 対象要素をスクロールコンテナの先頭（上端）に合わせる
-                inline: 'nearest',
-                behavior: 'auto'  // パネルの開閉アニメーションと二重に動いて見えないよう、瞬間移動にする
-            });
-        }
-        // active-section が無い（＝まだページ最上部を見ている）場合は
-        // 先頭の「ページトップ」項目が見える状態のままでよいので何もしない
-    });
 });
 
     $('#sp-toc-overlay, #toc-toggle').off('click').on('click', function() {
