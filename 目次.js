@@ -190,11 +190,17 @@ function setupFloatingTOC_SP() {
     });
 
     // ② TOCに載せるのは、その中で「今表示されている」ものだけに絞り込む
+    //    ※ content-a/content-b の切り替えだけでなく、region_content（折りたたみ領域）の
+    //      開閉状態も見なければ、PC版と挙動がズレて閉じたままの見出しまで載ってしまう
     var $headingsSP = $allHeadingsSP.filter(function() {
         if ($(this).hasClass('toc-ignore')) return false;
-        if ($(this).closest('.content-a, .content-b').length > 0) {
-            return $(this).closest('.content-a, .content-b').is(':visible');
-        }
+
+        var $switchArea = $(this).closest('.content-a, .content-b');
+        if ($switchArea.length > 0 && !$switchArea.is(':visible')) return false;
+
+        var $regionArea = $(this).closest('.region_content');
+        if ($regionArea.length > 0 && !$regionArea.is(':visible')) return false;
+
         return true;
     });
 
@@ -285,11 +291,65 @@ function setupEvents($headings, $commentArea) {
 }
 
 // ============================================================
+// ↓【追加】region（折りたたみ領域）の開閉を検知して目次を再構築
+// ============================================================
+// region_switch クリックで .region_content に uk-hidden が付け外しされるが、
+// そのタイミングでは目次側は何も知らないため、開いた瞬間に中の見出しが
+// 目次へ反映されない（閉じても消えない）。
+// .region_content の class 変化を MutationObserver で監視し、
+// 変化があれば既存の 'wiki-toc-rebuild' イベントを飛ばして再生成させる。
+function setupRegionTocWatcher() {
+    let rebuildTimer = null;
+    const requestRebuild = () => {
+        clearTimeout(rebuildTimer);
+        // region開閉アニメーション等が絡む場合があるため少し待ってから再構築
+        rebuildTimer = setTimeout(() => {
+            document.dispatchEvent(new CustomEvent('wiki-toc-rebuild'));
+        }, 200);
+    };
+
+    const observedRegions = new WeakSet();
+
+    function observeRegion(el) {
+        if (observedRegions.has(el)) return;
+        observedRegions.add(el);
+        const mo = new MutationObserver(requestRebuild);
+        mo.observe(el, { attributes: true, attributeFilter: ['class', 'style'] });
+    }
+
+    // 既存の region_content を監視対象に
+    document.querySelectorAll('.region_content').forEach(observeRegion);
+
+    // ページ内で後からregionブロックが追加されるケースにも対応
+    const bodyObserver = new MutationObserver(mutations => {
+        let found = false;
+        mutations.forEach(m => {
+            m.addedNodes.forEach(node => {
+                if (node.nodeType !== 1) return;
+                if (node.matches && node.matches('.region_content')) {
+                    observeRegion(node);
+                    found = true;
+                }
+                if (node.querySelectorAll) {
+                    node.querySelectorAll('.region_content').forEach(el => {
+                        observeRegion(el);
+                        found = true;
+                    });
+                }
+            });
+        });
+        if (found) requestRebuild();
+    });
+    bodyObserver.observe(document.body, { childList: true, subtree: true });
+}
+
+// ============================================================
 // ↓初回呼び出し
 // ============================================================
 setTimeout(function(){
     generateFloatingTOC();
     setupFloatingTOC_SP();
+    setupRegionTocWatcher();
 }, 500);
 
 
