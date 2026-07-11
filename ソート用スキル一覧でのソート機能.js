@@ -7,7 +7,7 @@ CONFIG
 
 const CFG={
 DEBOUNCE:250,
-DELAY:200,
+DELAY:150,
 WRAP:'.wikidb-sortable',
 TBL:'.uk-overflow-container',
 SEP:'\x00'
@@ -55,6 +55,15 @@ let mode='enhanced';
 let wrap,ctrl;
 let timer=null;
 
+/* ★最適化: DOMが「並び替え済み」かどうかを追跡するフラグ。
+   sortMode==='default' のときに毎回全テーブルをinsertBeforeし直す
+   無駄な処理をスキップするために使う。 */
+let isReordered=false;
+
+/* ★最適化: #wikidb-sort-key の再構築が本当に必要かどうかを判定するための
+   直前のinclude構成の署名（ラベルを連結した文字列） */
+let lastIncludeSig=null;
+
 const originalOrder=new Map();
 const originalPos=new Map();
 
@@ -66,17 +75,18 @@ function norm(str){
 return (str||'').replace(/[\r\n\s]+/g,' ').trim();
 }
 
-function extractVal(effect,p){
+/* ★最適化: 引数を「まだ改行・空白を含む生のeffect文字列」から
+   「呼び出し側で1回だけ計算済みの、空白除去済み文字列」に変更。
+   同じeffect文字列に対してPRESETSの数だけreplace()を繰り返す無駄を排除。 */
+function extractVal(collapsedEffect,p){
 
 if(!p.pat) return null;
 
-const e=effect.replace(/[\r\n\s]+/g,'');
-
-if(p.ex && p.ex.some(r=>r.test(e))) return null;
+if(p.ex && p.ex.some(r=>r.test(collapsedEffect))) return null;
 
 for(const reg of p.pat){
 
-const m=e.match(reg);
+const m=collapsedEffect.match(reg);
 
 if(m){
 
@@ -134,10 +144,21 @@ originalPos.set(el,{parent:el.parentNode,next:el.nextSibling});
 
 const $el=$(el);
 
+/* ★最適化: .content-a / .content-b は複数箇所から参照されるため
+   jQueryオブジェクトを1回だけ取得してキャッシュする */
+const $contentA=$el.find('.content-a');
+const $contentB=$el.find('.content-b');
+
 const name=norm($el.find('tr:first td:first p:first').text());
 
-let effectA=norm($el.find('.content-a').text());
-let effectB=norm($el.find('.content-b').text());
+/* ★最適化: 生のcontent-a/content-bテキストを1回だけ計算し、
+   effectA/effectB と textA/textB の両方で使い回す
+   （元コードの「フォールバック仕様の違い」は完全に維持） */
+const rawA=norm($contentA.text());
+const rawB=norm($contentB.text());
+
+let effectA=rawA;
+let effectB=rawB;
 
 if(!effectA) effectA=norm($el.text());
 if(!effectB) effectB=effectA;
@@ -154,6 +175,26 @@ dedup[key]=true;
 
 }
 
+/* ★最適化: extractValに渡す「空白除去済み文字列」を
+   PRESETSループの外側で1回だけ計算 */
+const effectACollapsed=effectA.replace(/[\r\n\s]+/g,'');
+const effectBCollapsed=effectB.replace(/[\r\n\s]+/g,'');
+
+/* ★最適化: scopeを持たないプリセット用に $el 全体のテキストを1回だけ計算 */
+const fullText=norm($el.text());
+
+/* ★最適化: scope付きプリセット（.scope_areaなど）のテキストを
+   同一scope文字列につき1回だけ計算してキャッシュ */
+const scopeTextCache={};
+
+function getScopeText($content,scope,side){
+const ckey=side+'|'+scope;
+if(!(ckey in scopeTextCache)){
+scopeTextCache[ckey]=norm($content.find(scope).text());
+}
+return scopeTextCache[ckey];
+}
+
 const valuesA={};
 const valuesB={};
 const matchesA={};
@@ -161,8 +202,8 @@ const matchesB={};
 
 for(const p of PRESETS){
 
-valuesA[p.label]=extractVal(effectA,p);
-valuesB[p.label]=extractVal(effectB,p);
+valuesA[p.label]=extractVal(effectACollapsed,p);
+valuesB[p.label]=extractVal(effectBCollapsed,p);
 
 /* match判定 */
 
@@ -170,13 +211,13 @@ let targetA,targetB;
 
 if(p.scope){
 
-targetA=norm($el.find('.content-a').find(p.scope).text());
-targetB=norm($el.find('.content-b').find(p.scope).text());
+targetA=getScopeText($contentA,p.scope,'a');
+targetB=getScopeText($contentB,p.scope,'b');
 
 }else{
 
-targetA=norm($el.text());
-targetB=targetA;
+targetA=fullText;
+targetB=fullText;
 
 }
 
@@ -185,11 +226,9 @@ matchesB[p.label]=p.match ? p.match.some(w=>targetB.includes(w)) : true;
 
 }
 
-const textA = norm($el.find('.content-a').text());
-const textB = norm($el.find('.content-b').length
-  ? $el.find('.content-b').text()
-  : $el.text()
-);
+/* textA/textB は元コードのフォールバック仕様（$contentBの存在有無で判定）を維持 */
+const textA = rawA;
+const textB = $contentB.length ? rawB : fullText;
 
 const lcA = extractLCFromText(textA);
 const lcB = extractLCFromText(textB);
@@ -244,7 +283,12 @@ function applyAll(){
 const {include,exclude}=getFilterGroups();
 const pLen=include.length;
 
-/* sort-key select を再構築 */
+/* ★最適化: sort-key select は include の構成（labelの並び）が
+   前回から変化していない場合は再構築をスキップする */
+const includeSig=include.map(p=>p.label).join(CFG.SEP);
+
+if(includeSig!==lastIncludeSig){
+
 const $sel=$('#wikidb-sort-key');
 if($sel.length){
 
@@ -263,6 +307,10 @@ sortKey=+prev;
 $sel.val('-1');
 sortKey=-1;
 }
+
+}
+
+lastIncludeSig=includeSig;
 
 }
 
@@ -379,6 +427,11 @@ return (sortMode==='asc'?av-bv:bv-av)||a.orig-b.orig;
 
 if(sortMode==='default'){
 
+/* ★最適化: 既にDOM順が「元の並び」であれば、
+   insertBeforeを繰り返す無駄な再配置をスキップする。
+   検索やフィルタだけの操作で並び替えが発生していないケースを高速化。 */
+if(isReordered){
+
 for(const el of tables){
 
 const pos=originalPos.get(el);
@@ -386,6 +439,10 @@ const pos=originalPos.get(el);
 if(pos?.parent){
 pos.parent.insertBefore(el,pos.next);
 }
+
+}
+
+isReordered=false;
 
 }
 
@@ -400,6 +457,8 @@ frag.appendChild(v.el);
 }
 
 ctrl[0].after(frag);
+
+isReordered=true;
 
 }
 
