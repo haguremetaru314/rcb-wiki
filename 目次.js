@@ -1,6 +1,35 @@
 var offsetValue = 20;
 
 // ============================================================
+// ↓ 共通ユーティリティ：見出し座標のキャッシュ生成
+// ============================================================
+// scrollイベントのたびに $(el).offset().top を呼ぶと毎回強制リフローが
+// 発生するため、TOC構築のタイミングで一度だけ座標を確定しキャッシュする。
+// （region開閉・content-a/b切替・resize等での再構築時は setupEvents が
+//   毎回呼ばれるので、その都度このキャッシュも作り直される＝常に最新）
+function buildHeadingPositions($headings) {
+    return $headings.map(function() {
+        return { id: this.id, top: $(this).offset().top };
+    }).get();
+}
+
+// scrollPos以下で最後（＝一番下）の見出しindexを二分探索で求める。
+// headingData は top昇順（DOM順）であることを前提とする。
+function findActiveHeadingIndex(headingData, scrollPos, offset) {
+    let lo = 0, hi = headingData.length - 1, ans = -1;
+    while (lo <= hi) {
+        const mid = (lo + hi) >> 1;
+        if (scrollPos >= headingData[mid].top - offset - 10) {
+            ans = mid;
+            lo = mid + 1;
+        } else {
+            hi = mid - 1;
+        }
+    }
+    return ans;
+}
+
+// ============================================================
 // ↓1. 目次生成・制御機能（PC版：最適化・軽量化・クールタイム実装版）
 // ============================================================
 function generateFloatingTOC() {
@@ -126,6 +155,9 @@ function generateFloatingTOC() {
         }
     }
 
+    // 【最適化】従来は $target.find('a') の各要素にobserve()を個別発行していたが、
+    // 親要素1つに対して subtree:true で監視すれば同じ検知ができ、
+    // observe()呼び出し回数がリンク数に比例しなくなる（O(n) → O(1)）。
     const observer = new MutationObserver(mutations => {
         if (isUserScrolling) return;
         mutations.forEach(m => {
@@ -135,26 +167,33 @@ function generateFloatingTOC() {
         });
     });
 
-    $target.find('a').each(function() {
-        observer.observe(this, { attributes: true });
+    observer.observe($target[0], {
+        attributes: true,
+        attributeFilter: ['class'],
+        subtree: true
     });
 
     setupEvents($headings, $commentArea);
 
     // --- 6. 初期ロード時の位置合わせ ---
     $(function() {
+        // 【最適化】setupEvents内で作るキャッシュと同じ座標を再利用し、
+        // .offset() の再呼び出し（＝追加のリフロー）を避ける。
+        const headingData = buildHeadingPositions($headings);
         const currentScroll = $(window).scrollTop();
-        let $bestMatch = null;
+
+        let bestMatch = null;
         let minDiff = Infinity;
-        $headings.each(function() {
-            const diff = Math.abs($(this).offset().top - currentScroll);
+        headingData.forEach(h => {
+            const diff = Math.abs(h.top - currentScroll);
             if (diff < minDiff) {
                 minDiff = diff;
-                $bestMatch = $(this);
+                bestMatch = h;
             }
         });
-        if ($bestMatch) {
-            const $tocLink = $target.find(`a[href="#${$bestMatch.attr('id')}"]`);
+
+        if (bestMatch) {
+            const $tocLink = $target.find(`a[href="#${bestMatch.id}"]`);
             if ($tocLink.length) scrollTocToActiveLink($tocLink.parent()[0]);
         }
 
@@ -243,6 +282,14 @@ function setupFloatingTOC_SP() {
 // ↓共通イベント処理
 // ============================================================
 function setupEvents($headings, $commentArea) {
+    // 【最適化】.offset().top をスクロール中に毎回呼ぶと強制リフローが
+    // 発生するため、構築タイミングで一度だけ座標を確定してキャッシュする。
+    // (region開閉・content-a/b切替等で再構築される場合はこの関数自体が
+    //  呼び直されるため、キャッシュも自動的に最新化される)
+    const headingData = buildHeadingPositions($headings);
+    const commentTop = ($commentArea && $commentArea.length) ? $commentArea.offset().top : null;
+    const commentId = ($commentArea && $commentArea.length) ? $commentArea.attr('id') : null;
+
     $(document).off('click', '#toc-target a').on('click', '#toc-target a', function(e) {
         var href = $(this).attr('href');
         var $targetEl = (href === "#wiki_header") ? $('body') : $(href);
@@ -259,7 +306,12 @@ function setupEvents($headings, $commentArea) {
         }
     });
 
-    $(window).off('scroll.toc').on('scroll.toc', function() {
+    // 【最適化】requestAnimationFrame で間引き、1フレーム1回だけ実処理を走らせる。
+    // 中身の処理は .offset() を呼ばず、キャッシュ済み座標(headingData)を
+    // 二分探索するだけなので、リフローもO(n)線形走査も発生しない。
+    let scrollTicking = false;
+
+    function handleScroll() {
         var scrollPos = $(document).scrollTop();
         var $allLinks = $('#toc-target a');
 
@@ -270,20 +322,28 @@ function setupEvents($headings, $commentArea) {
         }
 
         var activeId = "";
-        $headings.each(function() {
-            if (scrollPos >= $(this).offset().top - offsetValue - 10) {
-                activeId = $(this).attr('id');
-            }
-        });
+        var idx = findActiveHeadingIndex(headingData, scrollPos, offsetValue);
+        if (idx >= 0) {
+            activeId = headingData[idx].id;
+        }
 
-        if ($commentArea && $commentArea.length > 0 && scrollPos >= $commentArea.offset().top - offsetValue - 10) {
-            activeId = $commentArea.attr('id');
+        if (commentTop !== null && scrollPos >= commentTop - offsetValue - 10) {
+            activeId = commentId;
         }
 
         if (activeId) {
             $allLinks.removeClass('active-section');
             $('#toc-target a[href="#' + activeId + '"]').addClass('active-section');
         }
+    }
+
+    $(window).off('scroll.toc').on('scroll.toc', function() {
+        if (scrollTicking) return;
+        scrollTicking = true;
+        requestAnimationFrame(function() {
+            handleScroll();
+            scrollTicking = false;
+        });
     });
 
     // 初回ロード時にハイライト反映
