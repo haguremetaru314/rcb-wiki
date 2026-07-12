@@ -174,30 +174,26 @@ function generateFloatingTOC() {
     });
 
     setupEvents($headings, $commentArea);
-
+    
     // --- 6. 初期ロード時の位置合わせ ---
     $(function() {
-        // 【最適化】setupEvents内で作るキャッシュと同じ座標を再利用し、
-        // .offset() の再呼び出し（＝追加のリフロー）を避ける。
-        const headingData = buildHeadingPositions($headings);
-        const currentScroll = $(window).scrollTop();
-
-        let bestMatch = null;
-        let minDiff = Infinity;
-        headingData.forEach(h => {
-            const diff = Math.abs(h.top - currentScroll);
-            if (diff < minDiff) {
-                minDiff = diff;
-                bestMatch = h;
-            }
-        });
-
-        if (bestMatch) {
-            const $tocLink = $target.find(`a[href="#${bestMatch.id}"]`);
-            if ($tocLink.length) scrollTocToActiveLink($tocLink.parent()[0]);
-        }
-
-        // 初回ハイライト反映
+        // 【修正】以前はここで「現在のスクロール位置に一番近い見出し」を
+        // 独自に計算し、それに向けてTOCパネルを先にスクロールさせていた。
+        // しかしこの判定は、通常のスクロール中に使われる
+        // findActiveHeadingIndex（＝一番下まで読み進めた見出しを採用する
+        // ロジック）とは基準が異なるため、実際にactiveになる見出しと
+        // ズレることがあった。
+        //
+        // さらに、その独自ロジックによる手動スクロールが
+        // lastAutoScrollTime を更新してしまい、直後に走る
+        // 「正しい見出しへの自動スクロール」（handleScroll →
+        // MutationObserver → scrollTocToActiveLink）が
+        // AUTO_SCROLL_COOLDOWN によってブロックされ、
+        // 間違った位置のまま固定されてしまっていた。
+        //
+        // → 独自ロジックは廃止し、通常のscroll処理にそのまま委ねる。
+        //    これによりハイライト対象とパネルのスクロール対象が
+        //    常に同じ基準（findActiveHeadingIndex）で一致するようになる。
         $(window).trigger('scroll.toc');
     });
 }
