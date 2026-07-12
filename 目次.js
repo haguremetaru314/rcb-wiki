@@ -174,7 +174,7 @@ function generateFloatingTOC() {
     });
 
     setupEvents($headings, $commentArea);
-    
+
     // --- 6. 初期ロード時の位置合わせ ---
     $(function() {
         // 【修正】以前はここで「現在のスクロール位置に一番近い見出し」を
@@ -400,12 +400,72 @@ function setupRegionTocWatcher() {
 }
 
 // ============================================================
+// ↓【追加】メインコンテンツの高さ変化を監視して目次を再構築
+// ============================================================
+// 広告・画像の遅延読み込み・外部ウィジェットなど、TOC生成後にも
+// #main_content の高さが変わるケースがあり、これによって見出し座標
+// (headingData) がズレ、リロード後のハイライト位置が合わなくなることがある。
+//
+// region開閉やcontent-a/b切替のようなイベントベースの検知では拾えないため、
+// ResizeObserver で #main_content 自体の高さ変化を直接監視し、
+// 変化が一定時間落ち着いたタイミングで 'wiki-toc-rebuild' を発火させる。
+function setupLayoutTocWatcher() {
+    const $mainEls = $('#main_content, .main_content');
+    if ($mainEls.length === 0) return;
+
+    const DEBOUNCE_MS = 400;         // この時間だけ高さ変化が止まったら再構築
+    const MIN_HEIGHT_DIFF = 5;       // これ未満の変化は誤差とみなし無視
+    const WATCH_DURATION_MS = 15000; // 監視を続ける最大時間（以降はコスト削減のため停止）
+
+    let debounceTimer = null;
+    let lastHeight = null;
+
+    const ro = new ResizeObserver(entries => {
+        for (const entry of entries) {
+            const newHeight = entry.contentRect.height;
+
+            // 初回コールバックは observe() 開始時に必ず発火する仕様のため、
+            // ここでは基準値の記録のみ行い、再構築は発火させない。
+            if (lastHeight === null) {
+                lastHeight = newHeight;
+                continue;
+            }
+
+            if (Math.abs(newHeight - lastHeight) < MIN_HEIGHT_DIFF) continue;
+            lastHeight = newHeight;
+
+            // 【重要】generateFloatingTOC / setupFloatingTOC_SP は
+            // #main_content 側の高さを変えるDOM操作を行わない
+            // （id属性の付与のみ、TOC自体はbody直下に追加）ため、
+            // ここでの再構築が自分自身を再度呼び出す無限ループにはならない。
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => {
+                document.dispatchEvent(new CustomEvent('wiki-toc-rebuild'));
+            }, DEBOUNCE_MS);
+        }
+    });
+
+    $mainEls.each(function() {
+        ro.observe(this);
+    });
+
+    // 一定時間経過後は監視を打ち切る。
+    // 遅延読み込み系のレイアウト変化は通常この時間内に収束するため、
+    // それ以降まで監視を続けるのは無駄なコストになる。
+    setTimeout(() => {
+        clearTimeout(debounceTimer);
+        ro.disconnect();
+    }, WATCH_DURATION_MS);
+}
+
+// ============================================================
 // ↓初回呼び出し
 // ============================================================
 setTimeout(function(){
     generateFloatingTOC();
     setupFloatingTOC_SP();
     setupRegionTocWatcher();
+    setupLayoutTocWatcher();
 }, 500);
 
 
