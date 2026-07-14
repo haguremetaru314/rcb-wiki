@@ -7,7 +7,7 @@ CONFIG
 
 const CFG={
 DEBOUNCE:250,
-DELAY:0,
+DELAY:50,
 WRAP:'.wikidb-sortable',
 TBL:'.uk-overflow-container',
 SEP:'\x00'
