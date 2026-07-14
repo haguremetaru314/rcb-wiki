@@ -270,7 +270,7 @@ function setupFloatingTOC_SP() {
 
     var btnBottom = window.innerHeight / 2 - 30;
     $('#sp-toc-open-btn').css('bottom', btnBottom + 'px');
-
+    $('#floating-toc').css('height', window.innerHeight + 'px');
     setupEvents($headingsSP, $commentSP);
 }
 
