@@ -1,0 +1,1277 @@
+/* ============================================================================================
+ いちおう作成者ごと境界線
+ ============================================================================================*/
+
+
+
+/* ============================================================
+   [01] ヘッダー設定：ロゴ部分への画像挿入
+   ============================================================*/
+
+/* ヘッダーのh1要素：擬似要素を絶対配置するための基準点とする */
+div#site_header h1 {
+    position: relative; /* 基準点設定 */
+}
+
+/* ヘッダー内のリンク（テキスト）の位置調整 */
+div#site_header h1 a {
+    line-height: 30px;  /* 行の高さを指定して縦位置を調整 */
+    margin-left: 40px;  /* アイコンを表示するための左側余白を確保 */
+    padding-left: 5px;  /* テキストとアイコンの間の微調整用余白 */
+}
+
+/* ヘッダーリンクの前にアイコン画像を表示するための擬似要素 */
+div#site_header h1 a:before {
+    position: absolute; /* 親要素（h1）を基準にして自由に配置 */
+    content: "";        /* 擬似要素を表示するために必須（空文字） */
+    width: 38px;        /* アイコンの横幅 */
+    height: 38px;       /* アイコンの縦幅 */
+    background-image: url(https://img.wiki3.jp/roguelikecardbattle/%E3%83%98%E3%83%83%E3%83%80%E3%83%BC%E3%82%A2%E3%82%A4%E3%82%B3%E3%83%B3.png); /* アイコン画像のURL */
+    background-size: contain;       /* 画像の縦横比を崩さず、指定サイズ内に全体を収める */
+    background-repeat: no-repeat;   /* 画像が余白に繰り返し表示されるのを防ぐ */
+    background-position: center;    /* 画像を領域の中央に配置 */
+    display: block;     /* 幅と高さを適用するためにブロック要素化 */
+    top: 0%;            /* 上端に合わせる */
+    border-radius: 15%; /* 角を少し丸くする（15%の丸み） */
+    left: 10px;
+}
+
+
+/* ============================================================
+   [02] 目次表示設定：PC画面用（右側に追従する目次）
+   ============================================================*/
+
+/* --- グローバル設定 --- */
+/* 目次内で現在閲覧中のセクションをハイライト表示（赤） */
+#toc-target a.active-section {
+    color: #ff0000 !important;         /* 文字色を赤で強制 */
+    font-weight: bold !important;      /* 太字で強制 */
+    border-left: 3px solid #ff0000;    /* 左側に赤い縦線を追加して強調 */
+    padding-left: 5px;                 /* 縦線と文字の間の余白 */
+    background-color: #fff5f5;         /* 背景をほんのり薄い赤にして視認性アップ */
+}
+
+/* --- PC表示時（画面幅1230px超かつ高さ700px超）のレイアウト適用 --- */
+@media (min-width: 1230px) and (min-height: 701px) {
+  
+    /* 画面右側に浮遊（追従）する目次コンテナ全体の枠組み */
+    #floating-toc {
+        position: fixed !important; /* スクロールしても画面上の同じ位置に固定 */
+        top: 120px;                 /* 画面上端からの距離（ヘッダーとの被り回避） */
+        right: 5px;                 /* 画面右端からの距離 */
+        width: calc(50vw - 475px - 20px); /* 画面中央からメインコンテンツの半分を引いた動的な幅指定 */
+        min-width: 80px;            /* 画面を縮めてもこれ以上狭くならない最小幅 */
+        max-width: 500px;           /* 画面を広げてもこれ以上広がらない最大幅 */
+        max-height: 75vh;           /* 縦の長さは画面の高さの75%までとする */
+        
+        display: flex;              /* 内部のタイトルとリストを並べるためFlexbox化 */
+        flex-direction: column;     /* 要素を縦方向に並べる */
+        overflow: hidden;           /* コンテナ全体ではスクロールさせず、枠からはみ出た部分を隠す */
+        padding: 0;                 /* 内側の余白を0にし、各要素で個別に調整する */
+
+        background: #fff;           /* 背景色を白に設定 */
+        border: 1px solid #ddd;     /* 薄いグレーの枠線 */
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1); /* コンテナの下に軽い影を落として立体感を出す */
+        z-index: 1000;              /* 他の要素より手前に表示させるための重なり順 */
+        border-radius: 4px;         /* 枠の角を丸くする */
+        box-sizing: border-box;     /* paddingやborderを幅・高さの計算に含める */
+    }
+  
+    /* 目次上部のヘッダー（「目次」タイトル、TOPボタン、閉じるボタンが入る固定エリア） */
+    .toc-title {
+        font-size: 16px;            /* タイトルの文字サイズ */
+        font-weight: bold;          /* タイトルを太字に */
+        border-bottom: 2px solid #eee; /* タイトル下の区切り線 */
+        color: #333;                /* 文字色を濃いグレーに */
+        display: flex;              /* 内部の要素を横並びにする */
+        justify-content: space-between; /* 要素を左右と中央に均等に散らして配置 */
+        align-items: center;        /* 要素の縦位置を中央で揃える */
+        
+        flex-shrink: 0;               /* リストが長くなってもタイトルエリアが潰れないように固定 */
+        padding: 15px 15px 5px 15px;  /* 上15px、左右15px、下5pxの内側余白 */
+        margin-bottom: 0;             /* リストとの隙間をなくす */
+        background: #fff;             /* 背後の要素と重なった際に透けないよう背景色を指定 */
+    }
+
+    /* 目次内に設置する「TOPに戻る」ボタンのデザイン */
+    #toc-header-top {
+        font-size: 10px;            /* 小さめの文字サイズ */
+        color: #0077bb;             /* リンクっぽい青色 */
+        cursor: pointer;            /* マウスカーソルを指マークに変更 */
+        background-color: #f0f8ff;  /* 薄い水色の背景 */
+        padding: 2px 6px;           /* ボタンの内側余白 */
+        border-radius: 4px;         /* ボタンの角を丸くする */
+        font-weight: normal;        /* 太字を解除して控えめに */
+        display: none;              /* 初期状態では非表示（JSで制御想定） */
+        white-space: nowrap;        /* ボタン内の文字が改行されないようにする */
+    }
+    
+    /* TOPボタンにマウスを乗せたときの演出 */
+    #toc-header-top:hover {
+        background-color: #0077bb;  /* 背景を濃い青色に */
+        color: #fff;                /* 文字色を白に反転 */
+    }
+
+    /* 目次の開閉（トグル）ボタン */
+    #toc-toggle {
+        font-size: 11px;            /* 小さめのアイコンサイズ */
+        color: #888;                /* 目立ちすぎないグレー */
+        cursor: pointer;            /* クリック可能であることを示す指マーク */
+        font-weight: normal;        /* 太字解除 */
+    }
+    
+    /* 開閉ボタンにマウスを乗せたときの演出 */
+    #toc-toggle:hover { 
+        color: #333;                /* 色を濃くして反応を示す */
+    }
+
+    /* 実際の目次項目が並ぶスクロールエリア */
+    #toc-target {
+        overflow-y: auto;           /* 項目が多い場合、ここだけ縦スクロールを許可する */
+        flex-grow: 1;               /* コンテナの残りの高さを全てこのエリアに割り当てる */
+        padding: 5px 15px 15px 15px; /* 上5px、左右・下15pxの内側余白 */
+        position: relative;         /* JavaScript等でスクロール位置を計算する際の基準点 */
+        scroll-behavior: smooth;    /* クリック等でスクロールした際の動きを滑らかにする */
+    }
+
+    /* 目次内の各項目間の区切り設定 */
+    #toc-target div {
+        border-bottom: 3px solid #eee; /* 項目の下に太めの薄グレー線を引く */
+        padding: 4px 0;                /* 上下に少しの余白を持たせる */
+    }
+    
+    /* 最後の項目の下には区切り線を引かない */
+    #toc-target div:last-child { 
+        border-bottom: none; 
+    }
+
+    /* 目次内のリンク文字の基本スタイルと文字溢れ対策 */
+    #toc-target a {
+        font-size: 13px;            /* 読みやすい標準的なサイズ */
+        color: #0077bb;             /* リンクを示す青色 */
+        text-decoration: none;      /* デフォルトの下線を消す */
+        display: block;             /* 横幅いっぱいにクリック判定を広げる */
+        line-height: 1.4;           /* 行間を少し開ける */
+        
+        /* 文字が長すぎた場合の処理 */
+        white-space: nowrap;        /* 強制的に1行で表示（改行させない） */
+        overflow: hidden;           /* 枠からはみ出た文字は見えなくする */
+        text-overflow: ellipsis;    /* はみ出た末尾を「...」で省略表示する */
+    }
+
+    /* 目次のリンクにマウスを乗せた時（ホバー時）の演出 */
+    #toc-target a:hover {
+        color: #005588 !important;    /* リンク色を少し濃い青に変更 */
+        font-weight: bold !important; /* 文字を太くして強調 */
+        background-color: #f0f8ff;    /* 背景をほんのり薄い水色にする */
+        text-decoration: none;        /* 下線は引き続き表示しない */
+    }
+
+    /* PC版における現在地ハイライト（全体設定を上書きしオレンジを優先） */
+    #toc-target a.active-section {
+        color: #ff6600 !important;      /* 目立つオレンジ色に上書き */
+        font-weight: bold !important;   /* 太字 */
+        border-left: 2px solid #ff6600; /* 左側にオレンジの縦線 */
+        padding-left: 4px;              /* 縦線との隙間 */
+        background-color: transparent;  /* 背景色はホバー時やグローバル設定を優先するため透明に */
+    }
+
+    /* --- 見出しレベルに応じた字下げ（階層の表現） --- */
+    .toc-page-name { padding-left: 0px !important; font-weight: bold; } /* ページ名：字下げなし、太字 */
+    .toc-h1 { padding-left: 8px !important; }                           /* 大見出し：少し字下げ */
+    .toc-h2 { padding-left: 18px !important; font-size: 0.95em !important; } /* 中見出し：さらに字下げ、文字少し小さめ */
+    .toc-h3 { padding-left: 28px !important; font-size: 0.9em !important; color: #666; } /* 小見出し：一番字下げ、文字小さめ、グレー色 */
+}
+
+
+/* =====================================
+   [03] 目次表示設定：スマホ画面用（スライドインする)
+   ====================================*/
+
+/* --- SP版UI要素のグローバル定義（幅・高さ問わず適用） --- */
+
+/* 画面端に常駐する「三本線（ハンバーガー）」開閉ボタン */
+/* 【注意】bottom の値はJS（読み込み時1回だけ window.innerHeight から計算）でセットするためここでは定義しない */
+/*         top/transform は使わない。bottom基準にすることでURLバー出入りの影響を受けない */
+#sp-toc-open-btn {
+    position: fixed !important;
+    right: 0 !important;
+    width: 50px !important;
+    height: 60px !important;
+    background: rgba(0, 0, 0, 0.3) !important;
+    color: #fff !important;
+    display: flex !important;          /* fadeIn後の表示状態はflexで中央揃え */
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 10px 0 0 10px !important;
+    z-index: 99999 !important;
+    cursor: pointer !important;
+    font-size: 30px !important;
+}
+
+/* メニューが開いている時に背後を暗くするオーバーレイ幕 */
+#sp-toc-overlay {
+    display: none;              /* 初期状態は非表示（JSで制御） */
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    bottom: 0 !important;       /* top:0 + bottom:0 で高さをビューポートに自動追従させる */
+    background: rgba(0, 0, 0, 0.5) !important;
+    z-index: 99999 !important;
+}
+
+/* SP版の#floating-tocスタイル：幅1229px以下、または高さ700px以下 */
+@media (max-width: 1229px), (max-height: 700px) {
+
+    /* スマホ用の目次コンテナ（画面外に待機し、横からスライドする設定） */
+    #floating-toc {
+        display: block !important;
+        position: fixed !important;
+        top: 0 !important;
+        /* 【変更】bottom:0によるビューポート自動追従は、スマホでアドレスバーの
+           出没時に高さがズレることがあるため廃止。
+           #sp-toc-open-btn と同じ方針で、JS側（setupFloatingTOC_SP内）にて
+           window.innerHeight から height をpx指定して明示的に固定する。
+           height の値は必ずJSで設定されるため、ここでの初期値指定は省略する。 */
+        right: -100% !important;    /* 【重要】初期状態は画面右外に完全に隠しておく */
+        width: 250px !important;
+        background: #fff !important;
+        z-index: 100000 !important;
+        transition: right 0.3s ease-in-out !important;
+        box-shadow: -5px 0 15px rgba(0,0,0,0.2) !important;
+        padding: 0 !important;
+        overflow-y: auto !important;
+        border: none !important;
+        border-radius: 0 !important;
+    }
+
+    /* JavaScript等で開閉クラスが付与された時の状態 */
+    #floating-toc.is-open {
+        right: 0 !important;
+    }
+
+    /* スマホ版目次内の上部ヘッダー（スクロール追従） */
+    .toc-title {
+        background: #f8f8f8;
+        padding: 20px;
+        font-size: 18px !important;
+        border-bottom: 1px solid #eee;
+        margin-bottom: 0 !important;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        position: sticky !important;
+        top: 0;
+        z-index: 10;
+    }
+
+    /* スマホ版目次を閉じるための「×」ボタン */
+    #toc-toggle {
+        font-size: 24px !important;
+        color: #333 !important;
+        width: 40px;
+        height: 40px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        background: #eee;
+        border-radius: 50%;
+        cursor: pointer;
+    }
+
+    /* SP版目次リストエリア */
+    #toc-target {
+        padding: 10px 0 !important;
+    }
+
+    /* 項目ごとの枠線 */
+    #toc-target div {
+        border-bottom: 1px solid #f0f0f0 !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    /* 【重要】スマホでのタップのしやすさを最優先したリンク設定 */
+    /* 【重要】スマホでのタップのしやすさを最優先したリンク設定 */
+    #toc-target a {
+        display: block !important;
+        width: 100% !important;
+        padding: 8px 16px !important;
+        font-size: 14px !important;
+        line-height: 1.4 !important;
+        white-space: nowrap !important;
+        text-overflow: ellipsis !important;
+        overflow: hidden !important;
+        box-sizing: border-box !important;
+        text-decoration: none !important;
+        color: #0077bb;
+    }
+
+    /* タップした瞬間のフィードバック */
+    #toc-target a:active {
+        background-color: #f0f0f0 !important;
+    }
+
+    /* 階層別字下げ */
+    #toc-target .toc-page-name a { padding-left: 20px !important; }
+    #toc-target .toc-h1 a { padding-left: 20px !important; }
+    #toc-target .toc-h2 a { padding-left: 35px !important; }
+    #toc-target .toc-h3 a { padding-left: 50px !important; }
+}
+
+/* ============================================================
+    [04] 脚注＆特定ワードのポップアップ表示設定
+   ============================================================ */
+
+/* --- A: 脚注ボタン ＆ スキル名リンク 共通ベースデザイン --- */
+#main_content a[href^="#footnote_"]:not(.popup-word-style),
+.popup-word-style {
+    position: relative !important;
+    display: inline-block !important;
+    text-decoration: none !important;
+    cursor: pointer !important;
+    
+    /* サイズ・形状（脚注とスキル名の統一感を出す） */
+    font-size: 1.0em !important;      /* 周囲より一回り小さく */
+    font-weight: bold !important;    /* 小さくても読めるように太字 */
+    line-height: 1.4 !important;
+    padding: 1px 4px !important;     /* 押しやすい横幅を確保 */
+    margin: 0 1px !important;        /* 文字との隙間 */
+    border-radius: 4px !important;   /* 柔らかい角丸 */
+    
+    /* 配色：通常時（控えめなボタン風） */
+    color: #444444 !important;
+    background-color: #f0f2f5 !important;
+    border: 2px solid #d1d5db !important;
+    
+    vertical-align: middle !important;
+    transition: all 0.2s ease !important;
+}
+
+/* スキル名リンク（.popup-word-style）固有の微調整 */
+.popup-word-style {
+    border-width: 2px !important; 
+    padding: 1px 1px !important;     /* 押しやすい横幅を確保 */
+    margin: 1 1px !important;        /* 文字との隙間 */
+    line-height: 1 !important;         /* 行の高さを最小限に */
+}
+
+/* 見出し（h1-h6）内のボタン背景を少し暗く、文字をそのままにする設定 */
+
+h2 .popup-word-style, 
+h3 .popup-word-style, 
+h4 .popup-word-style, 
+h5 .popup-word-style, 
+h6 .popup-word-style {
+    /* 背景を薄い黒（20%の濃さ）にする */
+    background-color: rgba(0, 0, 0, 0) !important;
+    
+    /* 文字色は見出しの色を維持 */
+    color: inherit !impprtant;
+    
+    /* 枠線を少し濃いめにしてボタン感を出す */
+    border: 2px solid rgba(0, 0, 0, 0.15) !important;
+    
+    /* 余白をさらに詰め、見出しの文字サイズを維持 */
+    padding: 0 2px !important;
+    margin: 0 !important;
+    display: inline !important;
+    font-size: 1em !important;
+}
+
+.popup-word-style:hover {
+    color: #70d0f8 !important;
+    text-decoration-color: rgba(112, 208, 248, 0.7) !important;
+}
+
+/* --- B: ホバー・アクティブ（クリック中）のデザイン --- */
+
+
+
+
+
+/* --- C: 黒い吹き出し（ツールチップ）本体の装飾 --- */
+.custom-tooltip {
+    position: absolute !important;
+    bottom: 160% !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    pointer-events: auto !important;
+
+    background-color: #333333 !important;
+    color: #ffffff !important;
+    padding: 8px 12px !important;
+    border-radius: 8px !important;
+    font-size: 13px !important;
+    line-height: 1.5 !important;
+    white-space: normal !important;
+    width: max-content !important;
+    max-width: 90vw !important;
+    min-width: 80px !important;
+    word-break: break-all !important;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.4) !important;
+    transition: opacity 0.2s ease !important;
+}
+
+/* 吹き出しのしっぽ（▼） */
+.custom-tooltip::after {
+    content: "" !important;
+    position: absolute !important;
+    top: 100% !important;
+    left: var(--arrow-left, 50%) !important;
+    transform: translateX(-50%) !important;
+    border: 6px solid transparent !important;
+    border-top-color: #333333 !important;
+}
+
+
+/* ============================================================
+   [05] ワイドレイアウト用設定（メイン幅固定版）
+   ============================================================ */
+
+
+/* --- 画面幅が極端に狭くない限り適用されるワイドモード --- */
+@media (min-width: 24px) {
+
+    /* ワイドレイアウト有効時のみ、横スクロールを許可する */
+    body.custom-wide-mode {
+        overflow-x: auto !important; /* 画面に収まりきらない巨大なコンテンツがある場合に横スクロールバーを出す */
+    }
+
+    /* 全体を囲むコンテナの幅制限を解除 */
+    body.custom-wide-mode div.uk-container.uk-container-center {
+        max-width: none !important;     /* 最大幅の制限（1200px等）を取り払う */
+        width: 100% !important;         /* 画面幅いっぱいまで広げる */
+        margin-left: 0 !important;      /* 中央揃え用のマージンをリセット */
+        margin-right: 0 !important;     /* 中央揃え用のマージンをリセット */
+        padding-left: 10px !important;  /* 左側に最低限の余白を設ける */
+        overflow-x: visible !important; /* コンテナレベルでの横スクロール隠しを解除 */
+    }
+
+    /* 各カラム（左メニュー、メイン、右）を並べるグリッドシステムをFlexboxで再構築 */
+    body.custom-wide-mode .uk-grid {
+        display: flex !important;       /* Flexboxを強制有効化 */
+        flex-wrap: nowrap !important;   /* カラムが絶対に下に落ちない（折り返さない）ように横並びを強制 */
+        justify-content: flex-start !important; /* 要素を左寄せで並べる */
+        min-width: calc(2045px - 200px) !important; /* レイアウト崩れ防止のための全体の最小幅を確保（計算式） */
+    }
+
+    /* 広告や不要なカラム要素（メニューとメインコンテンツ以外）を非表示にするハック */
+    body.custom-wide-mode .uk-grid > div:not(#wiki_menu):not(.main_content) {
+        flex: 0 0 0 !important;         /* Flexbox内でのサイズを0に固定（伸び縮みさせない） */
+        width: 0 !important;            /* 横幅を0に */
+        min-width: 0 !important;        /* 最小幅も0に */
+        margin: 0 !important;           /* 余白も消去 */
+        padding: 0 !important;          /* 内側余白も消去 */
+        overflow: visible !important;   /* はみ出し制御 */
+        position: relative !important;  /* 配置の基準点 */
+    }
+
+    /* 左側メニューの幅を固定 */
+    body.custom-wide-mode #wiki_menu {
+        width: 220px !important;        /* 幅を220pxに固定 */
+        min-width: 220px !important;    /* 縮まないように最小幅も220px */
+        flex: 0 0 220px !important;     /* Flexboxの計算上も220px固定とする */
+    }
+
+    /* 【修正箇所】メインコンテンツエリアの固定幅設定 */
+    body.custom-wide-mode .main_content {
+        /* 自動調整をやめ、1600pxの固定幅を持たせることで画面サイズに追従させない */
+        /* ※中身に合わせて広げたい場合は width: auto !important に変更を検討 */
+        width: 1600px !important; 
+        flex: 0 0 1600px !important;    /* Flexbox環境下でも絶対に1600pxを維持する */
+        
+        /* 右側に追従する目次メニューと本文が重ならないようにするための安全余白 */
+        margin-right: 230px !important; 
+    }
+
+    /* 右側に表示する目次メニュー等の追従設定 */
+    body.custom-wide-mode #floating-toc {
+        position: fixed;                /* スクロールしても定位置に固定 */
+        top: 80px;                      /* 上からの位置 */
+        right: 5px;                     /* 右からの位置 */
+        width: 200px !important;        /* 幅を200pxに固定 */
+        min-width: 200px !important;    /* 縮まないように固定 */
+        max-width: 200px !important;    /* 広がらないように固定 */
+        z-index: 1000;                  /* 他要素より手前に表示 */
+    }
+}
+
+/* ============================================================
+   [06] コンテンツ表示切り替えボタン（トグルボタン）の設定
+   ============================================================ */
+
+/* --- 1. ボタンの基本スタイル（通常版を表示中：赤背景でアピール） --- */
+#content-toggler {
+    position: fixed;                /* 画面の決まった位置に常にフロート表示 */
+    bottom: 40px;                   /* 画面下端から40px浮かす */
+    right: 40px;                    /* 画面右端から40px浮かす */
+    
+    /* ボタンのサイズ設定 */
+    padding: 20px 50px;             /* 上下20px、左右50pxの大きな余白でボタンを巨大化 */
+    font-size: 18px;                /* 目立つ大きな文字サイズ */
+    font-weight: bold;              /* 文字を太くして力強く */
+    
+    /* 配色設定（赤基調） */
+    background-color: #ff0000;      /* 強い赤色で目を引く */
+    color: #ffffff;                 /* 文字色は白 */
+    border: 1px solid #ffffff;      /* ボタンの周囲に1pxの白い縁取り線を入れる */
+    
+    /* 動作・装飾設定 */
+    cursor: pointer;                /* クリックできるボタンであることを示す */
+    border-radius: 8px;             /* 角を少し丸くして現代的なデザインに */
+    box-shadow: 0 4px 10px rgba(0,0,0,0.3); /* ボタンの下に影を落とし、浮いているように見せる */
+    z-index: 9999;                  /* いろんな要素の上に被さってでも表示させる */
+    transition: all 0.3s ease;      /* ホバー時などの変化を0.3秒かけて滑らかに行う */
+    text-align: center;             /* 中の文字を中央揃え */
+}
+
+/* --- 2. 強化版を表示中（JSによって .is-active クラスが付与された状態） --- */
+#content-toggler.is-active {
+    background-color: #000000;      /* 状態が変わったことが明確にわかるよう黒背景に変更 */
+    color: #ffffff;                 /* 文字色は白のまま */
+    border-color: #ffffff;          /* 白い縁取りも維持 */
+}
+
+/* --- 3. マウスホバー時のリッチな演出 --- */
+#content-toggler:hover {
+    opacity: 0.9;                   /* 少しだけ透明にしてクリック感を予感させる */
+    transform: translateY(-2px);    /* 上に2pxフワッと浮き上がるアニメーション */
+    box-shadow: 0 6px 15px rgba(255,255,255,0.2); /* 浮き上がりに合わせて影を濃く・広くする（白っぽい影） */
+}
+
+/* --- 4. content-a/b の切り替え：visibilityで制御 --- */
+.content-a, .content-b {
+  display: none;
+}
+
+/* --- 5. スマホ（画面幅480px以下）向けのコンパクト化設定 --- */
+@media (max-width: 480px) {
+    #content-toggler {
+        padding: 10px 20px;         /* ボタンの余白を小さくして邪魔にならないようにする */
+        font-size: 16px;            /* 文字サイズも少し小さく調整 */
+        bottom: 15px;               /* 画面下端のギリギリに寄せる */
+        right: 15px;                /* 画面右端のギリギリに寄せる */
+    }
+}
+
+.content-a p,
+.content-b p{
+margin:0;
+}
+
+/* --- 6. 【追加】初回訪問時（未クリック時）の注目アニメーション --- */
+#content-toggler.attention {
+    /* 5回だけ拡大縮小、発光は消えるまで無限に続ける */
+    animation: toggler-pulse 1.4s ease-in-out 5,
+               toggler-glow 1.4s ease-in-out infinite;
+}
+
+@keyframes toggler-pulse {
+    0%   { transform: scale(1); }
+    50%  { transform: scale(1.08); }
+    100% { transform: scale(1); }
+}
+
+@keyframes toggler-glow {
+    0%, 100% { box-shadow: 0 4px 10px rgba(0,0,0,0.3), 0 0 0px rgba(255,60,60,0); }
+    50%      { box-shadow: 0 4px 10px rgba(0,0,0,0.3), 0 0 25px 8px rgba(255,60,60,0.7); }
+}
+
+/* --- 7. 【追加】初回訪問時の説明吹き出し（ツールチップ） --- */
+#content-toggler-tip {
+    position: fixed;
+    z-index: 10000;
+    background-color: #000000;
+    color: #ffffff;
+    padding: 10px 16px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: bold;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    opacity: 0;
+    transform: translateY(6px);
+    transition: opacity 0.4s ease, transform 0.4s ease;
+    pointer-events: none;
+    white-space: nowrap;
+}
+#content-toggler-tip::after {
+    content: "";
+    position: absolute;
+    bottom: -6px;
+    right: 30px;
+    border-width: 6px 6px 0 6px;
+    border-style: solid;
+    border-color: #000000 transparent transparent transparent;
+}
+#content-toggler-tip.show {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+@media (max-width: 480px) {
+    #content-toggler-tip {
+        font-size: 12px;
+        padding: 8px 12px;
+    }
+}
+/* ============================================================
+   [07] リンク切れ要素のハイライト設定（JSによる判定結果の反映）
+   ============================================================ */
+
+/* 未作成ページ(.new)や、JSでリンク切れ判定された要素を目立たせる */
+a.broken-link-detected,
+a.new, 
+#wiki_body a.new,
+#wiki_menu a.new {
+    color: #ff0000 !important;      /* 目立つように文字を真っ赤に強制 */
+    font-weight: bold !important;   /* 太字にして強調 */
+    text-decoration: underline wavy #ff0000 !important; /* ただの下線ではなく、赤色の「波線」を引いて警告感を出す */
+}
+
+
+/* ======================================
+   [08] データベース表（skill_list等）のレイアウト・スクロール設定
+   =================================== */
+
+/* --- テーブルの枠組み設定 --- */
+.limited-row-table {
+  table-layout: fixed;              /* セルの幅を固定し、中身の文字量によってガタガタと崩れるのを防ぐ */
+  width: 100%;                      /* テーブル幅を親要素いっぱいまで広げる */
+}
+
+/* --- スクロールさせたい特定のセルに対する設定 --- */
+.limited-row-table td.scroll-cell {
+  padding: 0;                       /* セル自体の余白を消し、中のスクロール領域をいっぱいに広げる */
+  vertical-align: top;              /* セル内の要素を上揃えに配置 */
+}
+
+/* --- セル内のスクロール本体となる内側のコンテナ --- */
+.limited-row-table td.scroll-cell .scroll-inner {
+  max-height: 170px;                /* この高さを超えたらスクロールバーを出すという閾値 */
+  overflow-y: auto;                 /* 縦方向にはみ出た場合のみスクロールを許可 */
+  overflow-x: hidden;               /* 横方向へのはみ出し・スクロールは禁止 */
+  padding: 6px;                     /* スクロール領域内のコンテンツに少しの余白を持たせる */
+  box-sizing: border-box;           /* padding分を含めて高さを計算し、レイアウト崩れを防ぐ */
+}
+
+/* --- スクロールバー表示に伴うレイアウトのズレを防止 --- */
+.limited-row-table td.scroll-cell .scroll-inner {
+  scrollbar-gutter: stable;         /* スクロールバーが出現しても、中身のコンテンツの幅が縮んだりズレたりしないようにスペースを確保（対応ブラウザ向け） */
+}
+
+/* --- テーブル内の隠しコンテンツの初期状態（JSの表示切替用） --- */
+.limited-row-table .content-b {
+  display: none;                    /* セクション06のトグル機能と連携。最初は非表示 */
+}
+
+
+/* ============================================================
+   [09] デバイス別（PC/スマホ）の表示切り替え ＆ 編集モード対応
+   ============================================================ */
+
+/* --- 1. 閲覧時における表示切り替え --- */
+/* PC画面（769px以上）で閲覧中の場合 */
+@media screen and (min-width: 769px) {
+    .sp-table { display: none !important; } /* スマホ専用のテーブル要素は完全に隠す */
+}
+
+/* スマホ画面（768px以下）で閲覧中の場合 */
+@media screen and (max-width: 768px) {
+    .pc-table { display: none !important; } /* PC専用のテーブル要素は完全に隠す */
+}
+
+/* --- 2. 管理者・編集者モードでの特殊設定（両方を強制表示） --- */
+/* Wikiの編集画面やプレビュー画面では、PC用とスマホ用の両方のテーブルを
+   同時に確認・編集できないと不便なため、メディアクエリ（画面幅による隠蔽）を無視して両方表示させます。
+   
+   【対象となるクラス・ID】
+   .uk-form-stacked: Wikiモードでの編集画面
+   .cke_editable:    見たままモード（CKEditor）内
+   .wiki-content-preview: プレビュー画面
+   #edit_form:       編集フォーム全体
+*/
+.uk-form-stacked .pc-table, .uk-form-stacked .sp-table,
+.cke_editable .pc-table, .cke_editable .sp-table,
+.wiki-content-preview .pc-table, .wiki-content-preview .sp-table,
+#edit_form .pc-table, #edit_form .sp-table {
+    display: table !important;      /* 隠されていた要素を「テーブル」として強制的に表示状態に戻す */
+    visibility: visible !important; /* 見えない設定にされていた場合も強制可視化 */
+    opacity: 1 !important;          /* 透明度も100%（完全表示）に強制 */
+    border: 2px dashed #1e87f0 !important; /* 編集画面でのみ、テーブルの周りに青い「点線」の枠を付けて編集中であることを分かりやすくする */
+    margin-bottom: 20px !important; /* 2つのテーブルがくっつかないように下部の余白を取る */
+}
+
+/* --- 編集画面で「どちらの表か」を一目で判別するためのラベル付け --- */
+/* PC用テーブルの上部に付与する青いラベル */
+.cke_editable .pc-table::before,
+.uk-form-stacked .pc-table::before {
+    background: #1e87f0;            /* 青色背景 */
+    color: white;                   /* 白文字 */
+    padding: 2px 10px;              /* ラベルの余白 */
+    font-size: 12px;                /* 小さめの文字 */
+    display: block;                 /* ブロック要素としてテーブルの上に配置 */
+}
+
+/* スマホ用テーブルの上部に付与する赤いラベル */
+.cke_editable .sp-table::before,
+.uk-form-stacked .sp-table::before {
+    background: #e06c75;            /* 赤色（サーモンピンク系）背景 */
+    color: white;                   /* 白文字 */
+    padding: 2px 10px;              /* ラベルの余白 */
+    font-size: 12px;                /* 小さめの文字 */
+    display: block;                 /* ブロック要素としてテーブルの上に配置 */
+}
+
+
+
+
+
+
+
+/* ==================================
+   スキル脚注ポップアップスタイル (skill-popup.css)
+   対応スクリプト: skill-scripts.js
+   ================================= */
+
+/* --- 本文内のスキル名（トリガー） --- */
+.skill-trigger {
+    color: #191970;
+    cursor: help;
+    border-bottom: 1px dashed #40E0D0;
+    font-weight: bold !important;
+}
+
+/* --- モーダル本体 --- */
+#skill-card-modal {
+    position: fixed;
+    z-index: 999999;
+    background: rgba(10, 20, 25, 0.98);
+    border: 1px solid #444;
+    padding: 15px;
+    border-radius: 6px;
+    width: 320px;
+    max-width: calc(100vw - 10px);
+    box-sizing: border-box;
+    display: none;
+    pointer-events: auto;
+    color: #fff;
+    font-family: sans-serif;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+    overflow-wrap: break-word;
+}
+
+/* --- 強化版表示時のモーダル枠 --- */
+#skill-card-modal.modal-plus {
+    background: rgba(20, 12, 12, 0.98);
+    border-color: #664444;
+    box-shadow: 0 4px 15px rgba(140, 40, 40, 0.25);
+}
+#skill-card-modal.modal-plus .modal-text {
+    border-top-color: #443333;
+    color: #eedddd;
+}
+#skill-card-modal.modal-plus .modal-link {
+    border-color: #554444;
+    color: #ddbbbb;
+}
+#skill-card-modal.modal-plus .modal-link:hover {
+    background: rgba(200, 60, 60, 0.1);
+    color: #eecccc;
+}
+/* --- 切替ボタンエリア --- */
+.modal-sw-container { display: flex; gap: 5px; margin-bottom: 12px; }
+.sw-btn {
+    flex: 1; cursor: pointer; text-align: center; padding: 5px;
+    font-size: 11px; border: 1px solid #444; background: #222; color: #aaa;
+}
+.sw-btn.active-n { background: #eee !important; color: #000 !important; }
+.sw-btn.active-p { background: #ff4444 !important; color: #fff !important; }
+.sw-btn.disabled { opacity: 0.2; cursor: default; }
+
+/* --- ヘッダー部分 --- */
+.modal-header { display: flex; gap: 12px; }
+.modal-icon {
+    width: 60px;
+    height: 60px;
+    flex-shrink: 0;
+    border: 1px solid #333;
+    object-fit: contain;
+    background: #000;
+}
+.modal-title-box { flex: 1; min-width: 0; }
+
+/* --- スキル名 --- */
+.modal-name { font-weight: bold !important; font-size: 17px; line-height: 1.2; }
+.modal-name.type-normal { color: #ffffff; }
+.modal-name.type-plus   { color: #ff4444; }
+
+/* --- 属性・行数テキスト --- */
+.modal-meta { font-size: 11px; margin-top: 4px; color: #8af; }
+
+/* --- 説明文エリア --- */
+.modal-text {
+    font-size: 13px;
+    line-height: 1.5;
+    color: #ddd;
+    border-top: 1px solid #333;
+    padding-top: 8px;
+    margin-top: 10px;
+    min-height: 40px;
+}
+.modal-text img { max-width: 100%; height: auto; }
+
+/* --- 詳細ページリンク --- */
+.modal-link {
+    display: block;
+    margin-top: 12px;
+    text-align: center;
+    font-size: 11px;
+    color: #7395e6;
+    border: 1px solid #555;
+    padding: 6px;
+    text-decoration: none;
+    background: rgba(255,255,255,0.05);
+}
+.modal-link:hover { background: rgba(255,255,255,0.1); color: #fff; }
+
+/* --- ページネーション --- */
+.modal-pager {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    font-size: 12px;
+    color: #aaa;
+}
+.pager-arrow { user-select: none; }
+
+/* --- リンク切れ検出 --- */
+.broken-link-detected {
+    color: #f66 !important;
+    border-color: #933 !important;
+}
+
+/* ============================================================
+   敵スキル表スタイル (enemy-skill-table.css)
+   対応スクリプト: skill-scripts.js
+   ============================================================ */
+
+/* --- 共通ラッパー --- */
+.enemy-skill-table-wrapper {
+    margin: 1em 0;
+    font-size: 0.92em;
+    line-height: 1.5;
+    display: inline-block;
+}
+
+/* --- ヘッダー --- */
+.est-header {
+    background: #3a3a4a;
+    color: #ffffff;
+    font-weight: bold;
+    padding: 5px 10px;
+    border-radius: 4px 4px 0 0;
+    font-size: 1.05em;
+    letter-spacing: 0.05em;
+}
+
+/* --- バリアントラベル --- */
+.est-variant-label {
+    background: #555566;
+    color: #ccc;
+    padding: 3px 10px;
+    font-size: 0.88em;
+}
+
+/* --- テーブル本体 --- */
+.est-table {
+    width: auto;
+    border-collapse: collapse;
+    border: 2px solid #777;
+    background: #1e1e2e;
+    color: #ddd;
+}
+.est-table thead {
+    background: #2a2a3e;
+}
+.est-table th {
+    padding: 5px 8px;
+    border: 2px solid #444;
+    color: #aac;
+    font-weight: bold;
+    text-align: center;
+    white-space: nowrap;
+}
+.est-table td {
+    padding: 5px 8px;
+    border: 1px solid #666666;
+    vertical-align: top;
+}
+.est-table tbody tr:hover {
+    background: #2a2a44;
+}
+
+/* --- 各列幅 --- */
+.est-th-icon   { width: 90px; text-align: center; }
+.est-th-zoku   { width: 40px; text-align: center; }
+.est-th-effect { width: 230px; }
+.est-td-icon   { text-align: center; vertical-align: middle !important; }
+.est-td-zoku   { text-align: center;  vertical-align: middle !important; font-size: 0.88em; width: 40px; }
+.est-td-effect { width: 230px; }
+
+/* --- アイコン+枚数の横並びラッパー --- */
+.est-icon-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    text-decoration: none;
+}
+.est-icon-wrap:hover .est-skill-icon {
+    opacity: 0.8;
+}
+
+/* --- アイコン画像 --- */
+.est-skill-icon {
+    width: 80px;
+    height: 110px;
+    object-fit: contain;
+    display: block;
+    flex-shrink: 0;
+}
+
+/* --- ×枚数 --- */
+.est-icon-count {
+    font-size: 1em;
+    font-weight: bold;
+    color: #bbb;
+    white-space: nowrap;
+}
+
+/* --- リンク --- */
+.est-table a {
+    color: #88aaee;
+    text-decoration: none;
+}
+.est-table a:hover {
+    text-decoration: underline;
+    color: #aaccff;
+}
+
+/* --- データなし表示 --- */
+.est-notfound {
+    padding: 8px 12px;
+    background: #2a1a1a;
+    border: 1px solid #663;
+    color: #cc9966;
+    border-radius: 4px;
+    font-size: 0.9em;
+}
+
+/* --- 強化版テーブル --- */
+.est-header-plus {
+    background: #3a2828;
+    color: #ddaaaa;
+}
+.est-table-plus {
+    background: #1a1616;
+}
+.est-table-plus thead {
+    background: #261c1c;
+}
+.est-table-plus tbody tr:hover {
+    background: #2e1e1e;
+}
+.est-table-plus td,
+.est-table-plus th {
+    color: #ddbbbb;
+    border-color: #443030;
+}
+.est-table-plus .est-td-zoku {
+    color: #cc8888;
+}
+.est-table-plus .est-td-effect {
+    color: #ddc8c8;
+}
+
+
+.est-table:not(.est-table-plus) .est-derived-row td {
+    background: #1f2a3dfa;
+}
+
+.est-table-plus .est-derived-row td {
+    background: #2b1f1f;
+}
+
+
+.est-derived-row .est-td-icon {
+    text-align: left !important;
+}
+
+
+
+
+
+
+
+/* ============================================================
+   enemy-modal.css
+   スクリプト3「デッキ脚注ボタン」ポップアップ用スタイル
+   対象要素: #enemy-card-modal とその子孫、.enemy-trigger ボタン
+   ============================================================ */
+
+/* ── デッキ脚注ボタン（本文中のキャラ名リンク） ────────── */
+a.enemy-trigger {
+    color: #000000 !important;
+    background: #DAE9FF !important;
+    cursor: pointer !important;
+}
+
+a.enemy-trigger:hover {
+    color: #70d0f8 !important;
+    text-decoration-color: rgba(112, 208, 248, 0.7) !important;
+}
+
+/* ── モーダル本体 ─────────────────────────────────────────── */
+#enemy-card-modal {
+    background: #1a1e24;
+    border: 6px solid #1a1e24;
+    border-radius: 6px;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255,255,255,0.08);
+    min-width: 300px;
+    max-width: 420px;
+    overflow: hidden;
+    font-family: sans-serif;
+}
+
+/* ── トップエリア（キャラ画像 + ラベル） ────────────────── */
+.enemy-modal-top {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    background: #14171c;
+    border-bottom: 1px solid #2e333d;
+}
+
+/* キャラ画像ラッパー */
+.enemy-modal-chara-wrap {
+    flex: 0 0 auto;
+    width: 80px;
+    height: 80px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.enemy-modal-chara-img {
+    width: 80px;
+    height: 80px;
+    object-fit: contain;
+    image-rendering: auto;
+}
+
+/* テキスト側 */
+.enemy-modal-top-right {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+/* 「スキルデッキ」／「初期デッキ」ラベル */
+.enemy-modal-deck-label {
+    font-size: 0.8em;
+    color: #8a9bb0;
+    letter-spacing: 0.08em;
+}
+
+/* 「〇〇 のデッキ」名称 */
+.enemy-modal-name-label {
+    font-size: 1.0em;
+    font-weight: bold;
+    color: #e8ecf2;
+    letter-spacing: 0.04em;
+}
+
+/* ── パターンラベル（複数パターン時のみ表示） ───────────── */
+.enemy-modal-variant-label {
+    padding: 4px 14px;
+    font-size: 0.75em;
+    color: #7a8494;
+    background: #14171c;
+    border-bottom: 1px solid #2e333d;
+}
+
+/* ── デッキ全体のラッパー ────────────────────────────────── */
+.enemy-modal-deck {
+    display: flex;
+    flex-direction: column;
+    max-height: 280px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+/* スクロールバー（Webkit系） */
+.enemy-modal-deck::-webkit-scrollbar {
+    width: 4px;
+}
+.enemy-modal-deck::-webkit-scrollbar-track {
+    background: #1a1e24;
+}
+.enemy-modal-deck::-webkit-scrollbar-thumb {
+    background: #3a4050;
+    border-radius: 2px;
+}
+.enemy-modal-deck::-webkit-scrollbar-thumb:hover {
+    background: #4a5268;
+}
+
+/* ── 各スキル行 ──────────────────────────────────────────── */
+.enemy-modal-row {
+    display: flex;
+    align-items: center;
+    padding: 4px 6px;
+    border-bottom: 1px solid #2a2f38;
+    background: #22262e;
+    transition: background 0.12s;
+}
+
+.enemy-modal-row:last-child {
+    border-bottom: none;
+}
+
+.enemy-modal-row-clickable {
+    cursor: pointer;
+}
+
+.enemy-modal-row:hover {
+    background: #2c3140;
+}
+
+/* ── スキルアイコン（両端15pxトリム） ───────────────────── */
+.enemy-modal-skill-icon-wrap {
+    flex: 0 0 auto;
+    width: 70px;
+    height: 55px;
+    margin-right: 5px;
+    display: block;
+}
+
+.enemy-modal-skill-icon {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: cover;
+    object-position: center top;
+    image-rendering: auto;
+    clip-path: inset(5px 10px 0 );
+}
+.enemy-modal-skill-icon-wrap {
+    margin-left: -15px;
+}
+
+.enemy-modal-skill-icon-placeholder {
+    width: 70px;
+    height: 55px;
+    display: block;
+}
+
+/* ── スキル名 ────────────────────────────────────────────── */
+.enemy-modal-skill-name {
+    flex: 1;
+    font-size: 1.05em;
+    font-weight: bold;
+    color: #ffffff;
+    letter-spacing: 0.03em;
+}
+
+/* ── ×N カウント ─────────────────────────────────────────── */
+.enemy-modal-skill-count {
+    font-size: 1.05em;
+    font-weight: bold;
+    color: #ffffff;
+    min-width: 2.5em;
+    text-align: right;
+    letter-spacing: 0.02em;
+    margin-right: 8px;
+}
+
+/* ── 個別ページリンク ────────────────────────────────────── */
+.enemy-modal-page-link {
+    padding: 8px 10px 6px;
+    background: #1a1e24;
+    border-top: 1px solid #2e333d;
+}
+
+.enemy-modal-page-link a {
+    display: block;
+    width: 100%;
+    padding: 7px 0;
+    background: #22262e;
+    border: 1px solid #3a4050;
+    border-radius: 3px;
+    text-align: center;
+    font-size: 0.9em;
+    color: #7395e6;
+    text-decoration: none;
+    box-sizing: border-box;
+    transition: background 0.12s, color 0.12s;
+}
+
+.enemy-modal-page-link a:hover {
+    background: #2c3140;
+    color: #c0ccd8;
+    text-decoration: none;
+    background: rgba(255,255,255,0.1); color: #fff; 
+}
+
+
+#wikidb-controls{
+margin-bottom:14px;
+padding:10px;
+border:1px solid #ddd;
+background:#fafafa;
+}
+
+.wikidb-row{
+margin:6px 0;
+}
+
+#wikidb-search-input{
+padding:4px 6px;
+width:180px;
+}
+
+#wikidb-search-count{
+margin-left:6px;
+font-size:0.9em;
+color:#e67e22;
+}
+
+.wikidb-btn{
+margin:2px;
+padding:4px 8px;
+border:1px solid #ccc;
+background:#fff;
+cursor:pointer;
+}
+
+.wikidb-btn:hover{
+background:#f0f0f0;
+}
+
+.wikidb-btn.active{
+background:#4169e1;
+color:#fff;
+border-color:#4169e1;
+}
+
+#wikidb-sort-row{
+margin-top:6px;
+}
+.wikidb-filter.exclude{
+  opacity: .75;
+  outline: 2px solid #f66;
+}
