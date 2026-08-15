@@ -793,14 +793,14 @@ a.new,
 /* --- ヘッダー部分 --- */
 .modal-header { display: flex; gap: 12px; }
 .modal-icon {
-    width: 60px;
-    height: 60px;
+    width: 80px;
+    height: 70px;
     flex-shrink: 0;
     border: 1px solid #333;
     background: #000;
     object-fit: cover;              /* 変更: containから、拡大して枠を埋めるcoverに変更 */
     object-position: center top;    /* 追加: 敵デッキ脚注と同じく、絵の上部基準で表示位置を固定 */
-    clip-path: inset(7% 14% 0 14%); /* 追加: 画像の左右フレーム部分をトリミングして絵をクローズアップ */
+    clip-path: inset(7% 14% 10% 14%); /* 追加: 画像の左右フレーム部分をトリミングして絵をクローズアップ */
 }
 .modal-title-box { flex: 1; min-width: 0; }
 
