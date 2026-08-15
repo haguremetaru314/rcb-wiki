@@ -792,15 +792,31 @@ a.new,
 
 /* --- ヘッダー部分 --- */
 .modal-header { display: flex; gap: 12px; }
-.modal-icon {
-    width: 80px;
+/* --- ヘッダー部分 --- */
+.modal-header { display: flex; gap: 12px; }
+
+/* 円形の切り抜き枠 */
+.modal-icon-wrap {
+    width: 70px;
     height: 70px;
+    border-radius: 50%;     /* 円形にする */
+    position: relative;     /* imgの配置基準点 */
+    overflow: hidden;       /* はみ出た部分を非表示 */
     flex-shrink: 0;
     border: 1px solid #333;
     background: #000;
-    object-fit: cover;              /* 変更: containから、拡大して枠を埋めるcoverに変更 */
-    object-position: center top;    /* 追加: 敵デッキ脚注と同じく、絵の上部基準で表示位置を固定 */
-    clip-path: inset(7% 14% 10% 14%); /* 追加: 画像の左右フレーム部分をトリミングして絵をクローズアップ */
+}
+
+/* 枠内で自由に位置・拡大率を指定できる画像本体 */
+.modal-icon {
+    position: absolute;
+    top: 81%;                          /* 中心にしたい縦位置（画像に対する割合） */
+    left: 50%;                         /* 中心にしたい横位置（画像に対する割合） */
+    width: auto;
+    height: 190%;                      /* 拡大率（ズーム） */
+    max-width: none;
+    transform: translate(-50%, -50%);  /* top/leftの指定点を常に枠の中心に固定 */
+    object-fit: cover;
 }
 .modal-title-box { flex: 1; min-width: 0; }
 
