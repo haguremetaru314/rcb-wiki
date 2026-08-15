@@ -1168,32 +1168,41 @@ a.enemy-trigger:hover {
     background: #2c3140;
 }
 
-/* ── スキルアイコン（両端15pxトリム） ───────────────────── */
+/* ── スキルアイコン（円形切り抜き） ───────────────────── */
 .enemy-modal-skill-icon-wrap {
     flex: 0 0 auto;
-    width: 70px;
+    width: 55px;             /* 変更: 70x55の矩形→55x55の正方形に */
     height: 55px;
+    border-radius: 50%;      /* 追加: 円形にする */
+    position: relative;      /* 追加: imgの絶対配置の基準点 */
+    overflow: hidden;        /* 追加: はみ出た部分を非表示 */
     margin-right: 5px;
     display: block;
+    background: #000;        /* 追加: 画像読み込み前や透過部分の背景 */
+    border: 1px solid #333;  /* 追加: モーダル本体の見た目に合わせた縁取り（不要なら削除可） */
 }
 
 .enemy-modal-skill-icon {
-    width: 100%;
-    height: 100%;
-    display: block;
+    position: absolute;      /* 変更: 通常配置→絶対配置に */
+    top: 50%;                /* ← 中心にしたい縦位置。調整可能 */
+    left: 50%;                /* ← 中心にしたい横位置。調整可能 */
+    width: auto;
+    height: 140%;             /* ← ズーム倍率。調整可能 */
+    max-width: none;
+    transform: translate(-50%, -50%); /* top/leftの点を常に中心に固定 */
     object-fit: cover;
-    object-position: center top;
+    display: block;
     image-rendering: auto;
-    clip-path: inset(5px 10px 0 );
-}
-.enemy-modal-skill-icon-wrap {
-    margin-left: -15px;
+    /* clip-path は円形化により不要になったため削除 */
 }
 
+/* 旧: margin-left: -15px は矩形トリミング時の見た目補正だったため削除 */
 .enemy-modal-skill-icon-placeholder {
-    width: 70px;
+    width: 55px;              /* 変更: サイズをアイコンと統一 */
     height: 55px;
+    border-radius: 50%;       /* 追加: 円形の枠だけ表示されるように */
     display: block;
+    background: #000;
 }
 
 /* ── スキル名 ────────────────────────────────────────────── */
