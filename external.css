@@ -1184,10 +1184,10 @@ a.enemy-trigger:hover {
 
 .enemy-modal-skill-icon {
     position: absolute;      /* 変更: 通常配置→絶対配置に */
-    top: 50%;                /* ← 中心にしたい縦位置。調整可能 */
+    top: 81%;                /* ← 中心にしたい縦位置。調整可能 */
     left: 50%;                /* ← 中心にしたい横位置。調整可能 */
     width: auto;
-    height: 140%;             /* ← ズーム倍率。調整可能 */
+    height: 190%;             /* ← ズーム倍率。調整可能 */
     max-width: none;
     transform: translate(-50%, -50%); /* top/leftの点を常に中心に固定 */
     object-fit: cover;
