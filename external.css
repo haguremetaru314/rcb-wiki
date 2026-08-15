@@ -797,8 +797,8 @@ a.new,
 
 /* 円形の切り抜き枠 */
 .modal-icon-wrap {
-    width: 70px;
-    height: 70px;
+    width: 50px;
+    height: 50px;
     border-radius: 50%;     /* 円形にする */
     position: relative;     /* imgの配置基準点 */
     overflow: hidden;       /* はみ出た部分を非表示 */
