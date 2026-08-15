@@ -813,7 +813,7 @@ a.new,
     top: 81%;                          /* 中心にしたい縦位置（画像に対する割合） */
     left: 50%;                         /* 中心にしたい横位置（画像に対する割合） */
     width: auto;
-    height: 190%;                      /* 拡大率（ズーム） */
+    height: 180%;                      /* 拡大率（ズーム） */
     max-width: none;
     transform: translate(-50%, -50%);  /* top/leftの指定点を常に枠の中心に固定 */
     object-fit: cover;
