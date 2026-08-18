@@ -211,12 +211,25 @@ function setupFloatingTOC_SP() {
     });
 
     $headingsSP.each(function() {
+        
         var $this = $(this);
         var id = $this.attr('id');
         var tagName = this.tagName.toLowerCase();
         var prefix = (tagName === "h2") ? " " : (tagName === "h3") ? " " : "";
         $target.append('<div class="toc-item toc-' + tagName + '"><a href="#' + id + '">' + prefix + $this.text().trim() + '</a></div>');
     });
+
+    var $commentArea = $('#comment_area, .comment_plugin').first();
+if ($commentArea.length) {
+    var cId = $commentArea.attr('id') || 'anchor-comment';
+    $commentArea.attr('id', cId);
+
+    $target.append(
+        '<div class="toc-item toc-h1">' +
+        '<a href="#' + cId + '">コメント欄</a>' +
+        '</div>'
+    );
+}
 
     function openToc() {
         $('#floating-toc').addClass('is-open');
@@ -243,7 +256,7 @@ function setupFloatingTOC_SP() {
     $('#sp-toc-open-btn').css('bottom', btnBottom + 'px');
     $('#floating-toc').css('height', window.innerHeight + 'px');
 
-    setupEvents($headingsSP);
+    setupEvents($headingsSP, $commentArea);
 }
 
 // ============================================================
