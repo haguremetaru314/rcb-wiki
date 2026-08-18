@@ -1,20 +1,24 @@
 var offsetValue = 20;
 
+// ========================================
+// ■ 共通ブレークポイント（追加）
+// ========================================
+const TOC_BREAKPOINT = 1230;
+const TOC_HEIGHT_BREAKPOINT = 700;
+
+function isSP() {
+    return window.innerWidth <= TOC_BREAKPOINT || window.innerHeight <= TOC_HEIGHT_BREAKPOINT;
+}
+
 // ============================================================
 // ↓ 共通ユーティリティ：見出し座標のキャッシュ生成
 // ============================================================
-// scrollイベントのたびに $(el).offset().top を呼ぶと毎回強制リフローが
-// 発生するため、TOC構築のタイミングで一度だけ座標を確定しキャッシュする。
-// （region開閉・content-a/b切替・resize等での再構築時は setupEvents が
-//   毎回呼ばれるので、その都度このキャッシュも作り直される＝常に最新）
 function buildHeadingPositions($headings) {
     return $headings.map(function() {
         return { id: this.id, top: $(this).offset().top };
     }).get();
 }
 
-// scrollPos以下で最後（＝一番下）の見出しindexを二分探索で求める。
-// headingData は top昇順（DOM順）であることを前提とする。
 function findActiveHeadingIndex(headingData, scrollPos, offset) {
     let lo = 0, hi = headingData.length - 1, ans = -1;
     while (lo <= hi) {
@@ -30,11 +34,10 @@ function findActiveHeadingIndex(headingData, scrollPos, offset) {
 }
 
 // ============================================================
-// ↓1. 目次生成・制御機能（PC版：最適化・軽量化・クールタイム実装版）
+// ↓1. PC版
 // ============================================================
 function generateFloatingTOC() {
-    if (window.innerWidth <= 1230) return;
-    if (window.innerHeight <= 700) {
+    if (isSP()) {
         setupFloatingTOC_SP();
         return;
     }
@@ -63,17 +66,12 @@ function generateFloatingTOC() {
 
     let tocHtml = '<div class="toc-item toc-page-name"><a href="#wiki_header" id="toc-link-home">ページトップ</a></div>';
 
-    // ① 表示/非表示に関わらず、全見出しに対して一度だけIDを確定させる
-    //    (content-a側・content-b側の両方に固有のIDを振ることで、
-    //     切り替え時のID重複を防ぐ)
     const $allHeadings = $('#main_content, .main_content').find('h1, h2, h3');
 
     $allHeadings.each(function(i) {
         if (!this.id) this.id = 'toc-anchor-' + i;
     });
 
-    // ② TOCに載せるのは、その中で「今表示されている」ものだけに絞り込む
-    //    (i===0 の判定は元コードと同じく全見出し中でのインデックスを使う)
     const $headings = $allHeadings.filter((i, el) => {
         if ($(el).hasClass('toc-ignore')) return false;
         if (!$(el).is(':visible')) return false;
@@ -143,21 +141,15 @@ function generateFloatingTOC() {
         const scrollPos = container.scrollTop;
         const containerHeight = container.offsetHeight;
 
-        const topMargin = 20;
-        const bottomMargin = 100;
-
-        if (relTop < (scrollPos + topMargin) || relBottom > (scrollPos + containerHeight - bottomMargin)) {
+        if (relTop < scrollPos || relBottom > scrollPos + containerHeight) {
             container.scrollTo({
-                top: relTop - (containerHeight / 2) + (element.offsetHeight / 2),
+                top: relTop - containerHeight / 2,
                 behavior: 'smooth'
             });
             lastAutoScrollTime = now;
         }
     }
 
-    // 【最適化】従来は $target.find('a') の各要素にobserve()を個別発行していたが、
-    // 親要素1つに対して subtree:true で監視すれば同じ検知ができ、
-    // observe()呼び出し回数がリンク数に比例しなくなる（O(n) → O(1)）。
     const observer = new MutationObserver(mutations => {
         if (isUserScrolling) return;
         mutations.forEach(m => {
@@ -175,35 +167,15 @@ function generateFloatingTOC() {
 
     setupEvents($headings, $commentArea);
 
-    // --- 6. 初期ロード時の位置合わせ ---
-    $(function() {
-        // 【修正】以前はここで「現在のスクロール位置に一番近い見出し」を
-        // 独自に計算し、それに向けてTOCパネルを先にスクロールさせていた。
-        // しかしこの判定は、通常のスクロール中に使われる
-        // findActiveHeadingIndex（＝一番下まで読み進めた見出しを採用する
-        // ロジック）とは基準が異なるため、実際にactiveになる見出しと
-        // ズレることがあった。
-        //
-        // さらに、その独自ロジックによる手動スクロールが
-        // lastAutoScrollTime を更新してしまい、直後に走る
-        // 「正しい見出しへの自動スクロール」（handleScroll →
-        // MutationObserver → scrollTocToActiveLink）が
-        // AUTO_SCROLL_COOLDOWN によってブロックされ、
-        // 間違った位置のまま固定されてしまっていた。
-        //
-        // → 独自ロジックは廃止し、通常のscroll処理にそのまま委ねる。
-        //    これによりハイライト対象とパネルのスクロール対象が
-        //    常に同じ基準（findActiveHeadingIndex）で一致するようになる。
-        $(window).trigger('scroll.toc');
-    });
+    $(window).trigger('scroll.toc');
 }
 
 // ============================================================
-// ↓2. スマホ専用UI（サイドメニュー風 ＆ 全スキャン ＆ 強力コメント検索）
+// ↓2. SP版（修正版）
 // ============================================================
 function setupFloatingTOC_SP() {
-    if (window.innerWidth >= 1230 && window.innerHeight > 700) return;
-    
+    if (!isSP()) return;
+
     if ($('#floating-toc').length === 0) {
         $('body').append('<div id="floating-toc"><div class="toc-title">目次 <span id="toc-toggle">×</span></div><div id="toc-target"></div></div>');
     }
@@ -212,23 +184,22 @@ function setupFloatingTOC_SP() {
         $('body').append('<div id="sp-toc-overlay"></div>');
         $('#sp-toc-open-btn').fadeIn(200);
     }
-    
+
     var $target = $('#toc-target');
     $target.empty();
     $target.append('<div class="toc-item toc-page-name"><a href="#wiki_header">ページトップ</a></div>');
 
-    // ① 表示/非表示に関わらず、全見出しに対して一度だけIDを確定させる
     var $allHeadingsSP = $('#main_content, .main_content').find('h1, h2, h3');
 
     $allHeadingsSP.each(function(i) {
         if (!this.id) this.id = 'toc-anchor-sp-' + i;
     });
 
-    // ② TOCに載せるのは、その中で「今表示されている」ものだけに絞り込む
-    //    ※ content-a/content-b の切り替えだけでなく、region_content（折りたたみ領域）の
-    //      開閉状態も見なければ、PC版と挙動がズレて閉じたままの見出しまで載ってしまう
     var $headingsSP = $allHeadingsSP.filter(function() {
         if ($(this).hasClass('toc-ignore')) return false;
+
+        const style = window.getComputedStyle(this);
+        if (style.display === 'none' || style.visibility === 'hidden') return false;
 
         var $switchArea = $(this).closest('.content-a, .content-b');
         if ($switchArea.length > 0 && !$switchArea.is(':visible')) return false;
@@ -247,41 +218,39 @@ function setupFloatingTOC_SP() {
         $target.append('<div class="toc-item toc-' + tagName + '"><a href="#' + id + '">' + prefix + $this.text().trim() + '</a></div>');
     });
 
-    var $commentSP = $('#comment_area, .comment_plugin, #comment-form, .uk-comment').first();
-    if ($commentSP.length > 0) {
-        var cId = $commentSP.attr('id') || 'anchor-comment-sp';
-        $commentSP.attr('id', cId);
-        $target.append('<div class="toc-item toc-h1"><a href="#' + cId + '">コメント欄</a></div>');
+    function openToc() {
+        $('#floating-toc').addClass('is-open');
+        $('#sp-toc-overlay').fadeIn(200);
+        $('#sp-toc-open-btn').fadeOut(200);
+        $('body').css('overflow', 'hidden');
     }
 
-    $('#sp-toc-open-btn').off('click').on('click', function() {
-    $('#floating-toc').addClass('is-open');
-    $('#sp-toc-overlay').fadeIn(200);
-    $(this).fadeOut(200);
-    $('#toc-toggle').text('×');
-});
-
-    $('#sp-toc-overlay, #toc-toggle').off('click').on('click', function() {
+    function closeToc() {
         $('#floating-toc').removeClass('is-open');
         $('#sp-toc-overlay').fadeOut(200);
         $('#sp-toc-open-btn').fadeIn(200);
         $('body').css('overflow', '');
+    }
+
+    $('#sp-toc-open-btn').off('click').on('click', openToc);
+    $('#sp-toc-overlay, #toc-toggle').off('click').on('click', closeToc);
+
+    $(document).off('keydown.toc').on('keydown.toc', function(e) {
+        if (e.key === 'Escape') closeToc();
     });
 
     var btnBottom = window.innerHeight / 2 - 30;
     $('#sp-toc-open-btn').css('bottom', btnBottom + 'px');
     $('#floating-toc').css('height', window.innerHeight + 'px');
-    setupEvents($headingsSP, $commentSP);
+
+    setupEvents($headingsSP);
 }
 
 // ============================================================
 // ↓共通イベント処理
 // ============================================================
 function setupEvents($headings, $commentArea) {
-    // 【最適化】.offset().top をスクロール中に毎回呼ぶと強制リフローが
-    // 発生するため、構築タイミングで一度だけ座標を確定してキャッシュする。
-    // (region開閉・content-a/b切替等で再構築される場合はこの関数自体が
-    //  呼び直されるため、キャッシュも自動的に最新化される)
+
     const headingData = buildHeadingPositions($headings);
     const commentTop = ($commentArea && $commentArea.length) ? $commentArea.offset().top : null;
     const commentId = ($commentArea && $commentArea.length) ? $commentArea.attr('id') : null;
@@ -291,20 +260,19 @@ function setupEvents($headings, $commentArea) {
         var $targetEl = (href === "#wiki_header") ? $('body') : $(href);
         if ($targetEl.length) {
             e.preventDefault();
-            if (window.innerWidth <= 1000) {
+
+            if (isSP()) {
                 $('#floating-toc').removeClass('is-open');
                 $('#sp-toc-overlay').fadeOut(200);
                 $('#sp-toc-open-btn').fadeIn(200);
                 $('body').css('overflow', '');
             }
+
             var targetPos = (href === "#wiki_header") ? 0 : $targetEl.offset().top - offsetValue + 1;
             $('html, body').animate({ scrollTop: targetPos }, 400);
         }
     });
 
-    // 【最適化】requestAnimationFrame で間引き、1フレーム1回だけ実処理を走らせる。
-    // 中身の処理は .offset() を呼ばず、キャッシュ済み座標(headingData)を
-    // 二分探索するだけなので、リフローもO(n)線形走査も発生しない。
     let scrollTicking = false;
 
     function handleScroll() {
@@ -342,121 +310,26 @@ function setupEvents($headings, $commentArea) {
         });
     });
 
-    // 初回ロード時にハイライト反映
     $(window).trigger('scroll.toc');
 }
 
-// ============================================================
-// ↓【追加】region（折りたたみ領域）の開閉を検知して目次を再構築
-// ============================================================
-// region_switch クリックで .region_content に uk-hidden が付け外しされるが、
-// そのタイミングでは目次側は何も知らないため、開いた瞬間に中の見出しが
-// 目次へ反映されない（閉じても消えない）。
-// .region_content の class 変化を MutationObserver で監視し、
-// 変化があれば既存の 'wiki-toc-rebuild' イベントを飛ばして再生成させる。
-function setupRegionTocWatcher() {
-    let rebuildTimer = null;
-    const requestRebuild = () => {
-        clearTimeout(rebuildTimer);
-        // region開閉アニメーション等が絡む場合があるため少し待ってから再構築
-        rebuildTimer = setTimeout(() => {
-            document.dispatchEvent(new CustomEvent('wiki-toc-rebuild'));
-        }, 200);
-    };
+// ========================================
+// ■ リサイズ対応（追加）
+// ========================================
+$(window).off('resize.toc').on('resize.toc', function() {
+    var btnBottom = window.innerHeight / 2 - 30;
+    $('#sp-toc-open-btn').css('bottom', btnBottom + 'px');
+    $('#floating-toc').css('height', window.innerHeight + 'px');
 
-    const observedRegions = new WeakSet();
-
-    function observeRegion(el) {
-        if (observedRegions.has(el)) return;
-        observedRegions.add(el);
-        const mo = new MutationObserver(requestRebuild);
-        mo.observe(el, { attributes: true, attributeFilter: ['class', 'style'] });
+    if (isSP()) {
+        setupFloatingTOC_SP();
+    } else {
+        $('#floating-toc').removeClass('is-open');
+        $('#sp-toc-overlay').hide();
+        $('body').css('overflow', '');
+        generateFloatingTOC();
     }
-
-    // 既存の region_content を監視対象に
-    document.querySelectorAll('.region_content').forEach(observeRegion);
-
-    // ページ内で後からregionブロックが追加されるケースにも対応
-    const bodyObserver = new MutationObserver(mutations => {
-        let found = false;
-        mutations.forEach(m => {
-            m.addedNodes.forEach(node => {
-                if (node.nodeType !== 1) return;
-                if (node.matches && node.matches('.region_content')) {
-                    observeRegion(node);
-                    found = true;
-                }
-                if (node.querySelectorAll) {
-                    node.querySelectorAll('.region_content').forEach(el => {
-                        observeRegion(el);
-                        found = true;
-                    });
-                }
-            });
-        });
-        if (found) requestRebuild();
-    });
-    bodyObserver.observe(document.body, { childList: true, subtree: true });
-}
-
-// ============================================================
-// ↓【追加】メインコンテンツの高さ変化を監視して目次を再構築
-// ============================================================
-// 広告・画像の遅延読み込み・外部ウィジェットなど、TOC生成後にも
-// #main_content の高さが変わるケースがあり、これによって見出し座標
-// (headingData) がズレ、リロード後のハイライト位置が合わなくなることがある。
-//
-// region開閉やcontent-a/b切替のようなイベントベースの検知では拾えないため、
-// ResizeObserver で #main_content 自体の高さ変化を直接監視し、
-// 変化が一定時間落ち着いたタイミングで 'wiki-toc-rebuild' を発火させる。
-function setupLayoutTocWatcher() {
-    const $mainEls = $('#main_content, .main_content');
-    if ($mainEls.length === 0) return;
-
-    const DEBOUNCE_MS = 400;         // この時間だけ高さ変化が止まったら再構築
-    const MIN_HEIGHT_DIFF = 5;       // これ未満の変化は誤差とみなし無視
-    const WATCH_DURATION_MS = 15000; // 監視を続ける最大時間（以降はコスト削減のため停止）
-
-    let debounceTimer = null;
-    let lastHeight = null;
-
-    const ro = new ResizeObserver(entries => {
-        for (const entry of entries) {
-            const newHeight = entry.contentRect.height;
-
-            // 初回コールバックは observe() 開始時に必ず発火する仕様のため、
-            // ここでは基準値の記録のみ行い、再構築は発火させない。
-            if (lastHeight === null) {
-                lastHeight = newHeight;
-                continue;
-            }
-
-            if (Math.abs(newHeight - lastHeight) < MIN_HEIGHT_DIFF) continue;
-            lastHeight = newHeight;
-
-            // 【重要】generateFloatingTOC / setupFloatingTOC_SP は
-            // #main_content 側の高さを変えるDOM操作を行わない
-            // （id属性の付与のみ、TOC自体はbody直下に追加）ため、
-            // ここでの再構築が自分自身を再度呼び出す無限ループにはならない。
-            clearTimeout(debounceTimer);
-            debounceTimer = setTimeout(() => {
-                document.dispatchEvent(new CustomEvent('wiki-toc-rebuild'));
-            }, DEBOUNCE_MS);
-        }
-    });
-
-    $mainEls.each(function() {
-        ro.observe(this);
-    });
-
-    // 一定時間経過後は監視を打ち切る。
-    // 遅延読み込み系のレイアウト変化は通常この時間内に収束するため、
-    // それ以降まで監視を続けるのは無駄なコストになる。
-    setTimeout(() => {
-        clearTimeout(debounceTimer);
-        ro.disconnect();
-    }, WATCH_DURATION_MS);
-}
+});
 
 // ============================================================
 // ↓初回呼び出し
@@ -468,12 +341,11 @@ setTimeout(function(){
     setupLayoutTocWatcher();
 }, 500);
 
-
 // ============================================================
-// ↓ 通常版/強化版切り替え時の目次再生成
+// ↓ 再生成
 // ============================================================
 document.addEventListener('wiki-toc-rebuild', function() {
-    if (window.innerWidth <= 1230 || window.innerHeight <= 700) {
+    if (isSP()) {
         setupFloatingTOC_SP();
     } else {
         generateFloatingTOC();
