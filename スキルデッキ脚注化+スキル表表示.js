@@ -289,7 +289,6 @@
             if (parent.closest("#wiki_menu,#floating-toc,.skill-trigger,.enemy-trigger,#edit_form,.uk-navbar,.popup-word,.enemy-skill-table-wrapper")) {
               if (!parent.closest(".plugin_recenct_comment")) return;}
             if (/tc_/.test(parent.className || "")) return;
-            if (["I", "EM", "MARK", "U"].includes(parent.tagName)) return;
             if (!testRe.test(node.nodeValue)) return;
 
             combinedRe.lastIndex = 0;
