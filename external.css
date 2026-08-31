@@ -737,7 +737,7 @@ a.new,
 
 /* --- 本文内のスキル名（トリガー） --- */
 .skill-trigger {
-    color: #191970;
+    color: inherit;
     cursor: help;
     border-bottom: 1px dashed #40E0D0;
     font-weight: bold !important;
@@ -1042,7 +1042,7 @@ a.new,
 
 /* ── デッキ脚注ボタン（本文中のキャラ名リンク） ────────── */
 a.enemy-trigger {
-    color: #000000 !important;
+    color: inherit !important;
     background: #DAE9FF !important;
     cursor: pointer !important;
 }
