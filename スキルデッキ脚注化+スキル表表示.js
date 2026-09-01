@@ -278,17 +278,7 @@
         const skillExcludeSet = new Set(skillExcludes);
         const enemyExcludeSet = new Set(enemyExcludes);
 
-        return function linkifyNode(node) {
-            const parent = node.parentElement;
-            if (!parent) return;
-            if (parent.closest(".no-skill-link") && parent.closest(".no-enemy-link")) return;
-            const disableSkill = parent.closest(".no-skill-link");
-            const disableEnemy = parent.closest(".no-enemy-link");
-            if (parent.closest("h1,h4,.uk-h1,.uk-h2,.uk-h3")) return;
-            if (parent.closest("[style*='xx-large'],[style*='x-large']")) return;
-            if (parent.closest("#wiki_menu,#floating-toc,.skill-trigger,.enemy-trigger,#edit_form,.uk-navbar,.popup-word,.enemy-skill-table-wrapper")) {
-              if (!parent.closest(".plugin_recenct_comment")) return;           
-              }
+    
             if (!testRe.test(node.nodeValue)) return;
 
             
