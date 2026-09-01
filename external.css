@@ -341,7 +341,7 @@ div#site_header h1 a:before {
     border-radius: 4px !important;   /* 柔らかい角丸 */
     
     /* 配色：通常時（控えめなボタン風） */
-    color: #444444 !important;
+    color: inherit !important;
     background-color: #f0f2f5 !important;
     border: 2px solid #d1d5db !important;
     
