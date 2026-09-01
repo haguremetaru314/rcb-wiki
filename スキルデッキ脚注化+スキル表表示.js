@@ -279,7 +279,7 @@
         const enemyExcludeSet = new Set(enemyExcludes);
 
         return function linkifyNode(node) {
-            /*const parent = node.parentElement;
+            const parent = node.parentElement;
             if (!parent) return;
             if (parent.closest(".no-skill-link") && parent.closest(".no-enemy-link")) return;
             const disableSkill = parent.closest(".no-skill-link");
@@ -287,10 +287,7 @@
             if (parent.closest("h1,h4,.uk-h1,.uk-h2,.uk-h3")) return;
             if (parent.closest("[style*='xx-large'],[style*='x-large']")) return;
             if (parent.closest("#wiki_menu,#floating-toc,.skill-trigger,.enemy-trigger,#edit_form,.uk-navbar,.popup-word,.enemy-skill-table-wrapper")) {
-              if (!parent.closest(".plugin_recenct_comment")) return;*/
-            if ($parent.closest('a, .popup-word, script, style').length > 0) return false;
-        if ($parent.closest('h1,h2,h3,h4,h5,h6,.uk-h1,.uk-h2,.uk-h3,.uk-h4,.uk-h5,.uk-h6').length > 0) return false;
-        if ($parent.closest("[style*='xx-large'],[style*='x-large'],[style*='font-size']").length > 0) return false;              
+              if (!parent.closest(".plugin_recenct_comment")) return;           
               }
             if (!testRe.test(node.nodeValue)) return;
 
