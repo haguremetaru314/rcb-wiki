@@ -349,6 +349,11 @@ div#site_header h1 a:before {
     transition: all 0.2s ease !important;
 }
 
+/* スキルデッキ脚注（#footnote_auto へのリンク）の文字色を黒に固定 */
+a.popup-word.popup-word-style {
+    color: #000000 !important;
+}
+
 /* スキル名リンク（.popup-word-style）固有の微調整 */
 .popup-word-style {
     border-width: 2px !important; 
