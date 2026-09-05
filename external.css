@@ -349,8 +349,9 @@ div#site_header h1 a:before {
     transition: all 0.2s ease !important;
 }
 
-/* スキルデッキ脚注（#footnote_auto へのリンク）の文字色を黒に固定 */
-a.popup-word.popup-word-style {
+/* 脚注ポップアップ（黒背景）内で、スキル名・敵名リンク化された文字だけを黒に固定 */
+.custom-tooltip .skill-trigger,
+.custom-tooltip .enemy-trigger {
     color: #000000 !important;
 }
 
